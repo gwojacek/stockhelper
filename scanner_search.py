@@ -2721,15 +2721,17 @@ def _allsearch_ichimoku_yahoo_probe(
     members: list[str],
     exchange_suffix: str | None,
 ) -> bool:
-    """Compare three random cached latest candles exactly with live Yahoo data."""
+    """Verify three random caches against Yahoo without downgrading newer data."""
     probe_count = min(3, len(members))
     candidates = random.sample(list(members), k=len(members)) if members else []
+    max_probe_attempts = min(len(candidates), max(probe_count, 12))
     print(
         f"[refresh-check] {group_name}: allsearch Ichimoku Yahoo probes "
         f"(need {probe_count} comparable random instrument(s))"
     )
     compared = 0
-    for ticker in candidates:
+    cache_ahead = 0
+    for ticker in candidates[:max_probe_attempts]:
         fetch_symbol, instrument = _search_fetch_symbol(ticker, group_name, exchange_suffix)
         yahoo_symbol = ticker if instrument == "commodity" else fetch_symbol
         try:
@@ -2746,13 +2748,18 @@ def _allsearch_ichimoku_yahoo_probe(
                 and yahoo_signature is not None
                 and yahoo_signature[0] < cached_signature[0]
             ):
-                # Illiquid Yahoo symbols sometimes expose an older last-trade
-                # candle than a valid cached candle.  Such a symbol cannot say
-                # whether the market cache is fresh, so replace this probe with
-                # another random member rather than forcing a bogus refresh.
+                # Stooq/bulk can already contain today's session while Yahoo
+                # still exposes yesterday (especially before Yahoo publishes
+                # its daily candle).  The remote source has no newer data to
+                # merge, so it must not force a refresh. Do not count it as a
+                # comparable probe, though: later in the same trading day a
+                # liquid Yahoo symbol may already expose today's changing
+                # candle. Keep looking, bounded to 12 network probes.
+                cache_ahead += 1
                 print(
                     f"[refresh-check] {ticker}: Yahoo {candidate} newest={yahoo_signature[0]} is older "
-                    f"than cached newest={cached_signature[0]}; probe not comparable, trying another"
+                    f"than cached newest={cached_signature[0]}; cache is newer, trying another "
+                    f"({cache_ahead}/{max_probe_attempts} cache-ahead)"
                 )
                 continue
             compared += 1
@@ -2790,6 +2797,13 @@ def _allsearch_ichimoku_yahoo_probe(
             )
             return True
     if compared < probe_count:
+        if cache_ahead:
+            print(
+                f"[refresh-check] {group_name}: found only {compared}/{probe_count} comparable Yahoo probes "
+                f"within {max_probe_attempts} attempts; {cache_ahead} cache(s) were newer than Yahoo -> "
+                "keeping the newer cache"
+            )
+            return False
         print(
             f"[refresh-check] {group_name}: only {compared}/{probe_count} Yahoo probes were comparable; "
             "refreshing the whole market to avoid an unverified cache"
@@ -3137,6 +3151,15 @@ def _scan_workers_override() -> int | None:
     except ValueError:
         print(f"[workers] ignoring invalid STOCKHELPER_SCAN_WORKERS={raw!r}", flush=True)
         return None
+
+
+def _allsearch_default_workers(group_name: str, instrument_count: int) -> int | None:
+    """Return the batch default, leaving standalone scanner defaults untouched."""
+    if os.getenv("STOCKHELPER_BATCH_MODE") != "1":
+        return None
+    available = max(1, os.cpu_count() or 4)
+    requested = 3 if group_name.lower() in {"forex", "commodities"} else available
+    return min(requested, max(1, instrument_count))
 
 
 def _stale_stock_data_warnings(
@@ -4645,6 +4668,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
     found_too_late = False
     events: list[tuple[str, str, str]] = []
     last_pattern_abs: int | None = None
+    last_pattern_extreme: float | None = None
     i = flip_idx + 1
     while i < len(df):
         if current_side == "above":
@@ -4870,6 +4894,7 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
                 valid_count += 1
                 events.append((ev_date, formation, depth))
                 last_pattern_abs = pattern_abs
+                last_pattern_extreme = probe
                 if first_valid_date == "-":
                     first_valid_date = ev_date
                     first_valid_depth = depth
@@ -4912,34 +4937,40 @@ def _detect_ichimoku_retest(df: pd.DataFrame, flip_idx: int, current_side: str, 
             first_valid_status = "shallow_retest_pattern"
             events = [(ev_date, "bullish_engulfing", "shallow")]
             last_pattern_abs = confirm_idx
+            last_pattern_extreme = float(min(first["Low"], confirm["Low"]))
 
     if valid_count > 0:
         # If after a valid retest pattern price returned to cloud and then broke
         # the last pattern candle extreme in the opposite direction, downgrade
         # current state back to waiting_for_pattern.
-        if last_pattern_abs is not None and last_pattern_abs + 1 < len(df):
+        if last_pattern_abs is not None and last_pattern_extreme is not None and last_pattern_abs + 1 < len(df):
+            def _drop_invalidated_latest_pattern() -> tuple[str, str, int, str, list[tuple[str, str, str]]]:
+                remaining_events = events[:-1]
+                remaining_first_date = remaining_events[0][0] if remaining_events else "-"
+                return (
+                    "returned_to_cloud_waiting_for_pattern",
+                    "-",
+                    len(remaining_events),
+                    remaining_first_date,
+                    remaining_events,
+                )
+
             if current_side == "above":
-                last_pattern_floor = float(df["Low"].iloc[last_pattern_abs])
+                last_pattern_floor = last_pattern_extreme
                 returned_to_cloud = False
                 for k in range(last_pattern_abs + 1, len(df)):
                     if float(df["Low"].iloc[k]) <= float(top.iloc[k]):
                         returned_to_cloud = True
-                    if returned_to_cloud and float(df["Close"].iloc[k]) < last_pattern_floor:
-                        latest_idx = len(df) - 1
-                        if body_low.iloc[latest_idx] > top.iloc[latest_idx]:
-                            return _breakout_status_for_age(), "-", valid_count, first_valid_date, events
-                        return "returned_to_cloud_waiting_for_pattern", "-", valid_count, first_valid_date, events
+                    if returned_to_cloud and float(df["Low"].iloc[k]) < last_pattern_floor:
+                        return _drop_invalidated_latest_pattern()
             else:
-                last_pattern_ceiling = float(df["High"].iloc[last_pattern_abs])
+                last_pattern_ceiling = last_pattern_extreme
                 returned_to_cloud = False
                 for k in range(last_pattern_abs + 1, len(df)):
                     if float(df["High"].iloc[k]) >= float(bottom.iloc[k]):
                         returned_to_cloud = True
-                    if returned_to_cloud and float(df["Close"].iloc[k]) > last_pattern_ceiling:
-                        latest_idx = len(df) - 1
-                        if body_high.iloc[latest_idx] < bottom.iloc[latest_idx]:
-                            return _breakout_status_for_age(), "-", valid_count, first_valid_date, events
-                        return "returned_to_cloud_waiting_for_pattern", "-", valid_count, first_valid_date, events
+                    if returned_to_cloud and float(df["High"].iloc[k]) > last_pattern_ceiling:
+                        return _drop_invalidated_latest_pattern()
         latest_depth = events[-1][2]
         latest_status = f"{latest_depth}_retest_pattern"
         return latest_status, latest_depth, valid_count, first_valid_date, events
@@ -5060,6 +5091,8 @@ def run_ichimoku_search(target: str) -> int:
     else:
         if workers_override is not None:
             max_workers = min(max(1, workers_override), len(rest))
+        elif (allsearch_workers := _allsearch_default_workers(group_name, len(rest))) is not None:
+            max_workers = allsearch_workers
         elif group_name == "commodities":
             try:
                 commodity_workers = int(os.getenv("STOCKHELPER_COMMODITIES_WORKERS", "6"))
@@ -8744,6 +8777,42 @@ def run_fibo_search(target: str) -> int:
                             os.environ["STOCKHELPER_FORCE_REMOTE_REFRESH"] = prev_force_refresh
             else:
                 df, _, meta = _load_daily_data_with_retries(symbol=fetch_symbol, instrument_type=instrument, persist=True, fetch_older_data=False)
+
+            # One instrument can request the same forced anchors more than once:
+            # saved/chart anchors, previous-board anchors, and the refresh of a
+            # historical candidate can all converge on an identical setup.  The
+            # detector is intentionally expensive, so retain its result for the
+            # lifetime of this worker instead of recalculating identical inputs.
+            fibo_setup_cache: dict[
+                tuple[str, int, str, tuple[str, str] | None, bool],
+                FiboScanResult | None,
+            ] = {}
+
+            def _find_fibo_setup_once(
+                direction: str,
+                *,
+                end_offset: int = 0,
+                stale_cycle_mode: str = "reset",
+                forced_anchor_dates: tuple[str, str] | None = None,
+            ) -> FiboScanResult | None:
+                allow_equal = instrument == "forex"
+                key = (
+                    direction,
+                    end_offset,
+                    stale_cycle_mode,
+                    forced_anchor_dates,
+                    allow_equal,
+                )
+                if key not in fibo_setup_cache:
+                    fibo_setup_cache[key] = _find_fibo_setup(
+                        df,
+                        direction,
+                        end_offset=end_offset,
+                        stale_cycle_mode=stale_cycle_mode,
+                        allow_equal_third_close=allow_equal,
+                        forced_anchor_dates=forced_anchor_dates,
+                    )
+                return fibo_setup_cache[key]
             latest_candle_date = _latest_candle_date_from_df(df)
             expected_latest_session_date = get_expected_latest_session_date(instrument, group_name, current_datetime, fetch_symbol)
             latest_close = float(pd.to_numeric(df["Close"], errors="coerce").dropna().iloc[-1]) if "Close" in df.columns else float("nan")
@@ -8772,8 +8841,8 @@ def run_fibo_search(target: str) -> int:
             saved_fibo_anchors = _saved_fibo_anchors_for_ticker(ticker)
             saved_fibo_rows: list[FiboScanResult] = []
             for direction, anchor_start, anchor_end in saved_fibo_anchors:
-                cand = _find_fibo_setup(
-                    df, direction, allow_equal_third_close=(instrument == "forex"),
+                cand = _find_fibo_setup_once(
+                    direction,
                     forced_anchor_dates=(anchor_start, anchor_end),
                 )
                 if cand and not _is_waiting_candidate_stale(df, cand) and not _is_valid_reversal_invalidated(df, cand):
@@ -8825,13 +8894,13 @@ def run_fibo_search(target: str) -> int:
             # Try multiple end offsets so older (but still recent) valid formations are not missed.
             long_candidates: list[FiboScanResult] = []
             for off in [0, 5, 10, 15, 20, 30, 40]:
-                cand = _find_fibo_setup(df, "long", end_offset=off, allow_equal_third_close=(instrument == "forex"))
+                cand = _find_fibo_setup_once("long", end_offset=off)
                 if cand:
                     long_candidates.append(cand)
                 # Broad mode is substantially more expensive and is only needed
                 # at representative offsets; regular mode covers every offset.
                 if off in {0, 10, 20, 40}:
-                    broad_cand = _find_fibo_setup(df, "long", end_offset=off, stale_cycle_mode="allow", allow_equal_third_close=(instrument == "forex"))
+                    broad_cand = _find_fibo_setup_once("long", end_offset=off, stale_cycle_mode="allow")
                     if broad_cand:
                         long_candidates.append(broad_cand)
             # A board formation must keep the same structural anchors while it
@@ -8843,10 +8912,8 @@ def run_fibo_search(target: str) -> int:
             # temporarily lost the row; full validation below prevents an
             # expired or invalid formation from being resurrected.
             for anchor_start, anchor_end in _previous_board_fibo_anchors(ticker):
-                carried = _find_fibo_setup(
-                    df,
+                carried = _find_fibo_setup_once(
                     "long",
-                    allow_equal_third_close=(instrument == "forex"),
                     forced_anchor_dates=(anchor_start, anchor_end),
                 )
                 if carried:
@@ -8869,10 +8936,8 @@ def run_fibo_search(target: str) -> int:
                 )
                 if not should_refresh:
                     continue
-                refreshed = _find_fibo_setup(
-                    df,
+                refreshed = _find_fibo_setup_once(
                     "long",
-                    allow_equal_third_close=(instrument == "forex"),
                     forced_anchor_dates=(historical.incline_start_date, historical.incline_end_date),
                 )
                 if refreshed:
@@ -8920,7 +8985,7 @@ def run_fibo_search(target: str) -> int:
             if short_fibo_enabled:
                 short_candidates: list[FiboScanResult] = []
                 for off in [0, 5, 10, 15, 20, 30, 40]:
-                    cand = _find_fibo_setup(df, "short", end_offset=off, allow_equal_third_close=(instrument == "forex"))
+                    cand = _find_fibo_setup_once("short", end_offset=off)
                     if cand:
                         short_candidates.append(cand)
                 if short_candidates:
@@ -8980,6 +9045,8 @@ def run_fibo_search(target: str) -> int:
     workers_override = _scan_workers_override()
     if workers_override is not None:
         max_workers = min(max(1, workers_override), len(members))
+    elif (allsearch_workers := _allsearch_default_workers(group_name, len(members))) is not None:
+        max_workers = allsearch_workers
     elif group_name == "commodities":
         try:
             max_workers = min(max(1, int(os.getenv("STOCKHELPER_COMMODITIES_WORKERS", "1"))), len(members))
@@ -9061,6 +9128,7 @@ def run_fibo_search(target: str) -> int:
             rows1.append(r)
             continue
     avg_turnover_10d_by_key: dict[tuple[str, str, str, str], float] = {}
+    turnover_by_symbol: dict[tuple[str, str], float | None] = {}
 
     def _fx_to_pln_for_turnover(symbol: str, instrument_type: str) -> float:
         if instrument_type in {"commodity", "forex"}:
@@ -9075,18 +9143,26 @@ def run_fibo_search(target: str) -> int:
             return 1.0
 
     def _avg10d_turnover_pln_for_symbol(symbol: str, instrument_type: str) -> float | None:
+        cache_key = (symbol, instrument_type)
+        if cache_key in turnover_by_symbol:
+            return turnover_by_symbol[cache_key]
         try:
             df_l, _, _ = load_or_update_daily_data(symbol=symbol, instrument_type=instrument_type, persist=True)
         except Exception:
+            turnover_by_symbol[cache_key] = None
             return None
         if "Close" not in df_l.columns or "Volume" not in df_l.columns or len(df_l) < 10:
+            turnover_by_symbol[cache_key] = None
             return None
         turnover_native = pd.to_numeric(df_l["Close"], errors="coerce") * pd.to_numeric(df_l["Volume"], errors="coerce")
         turnover_native = turnover_native.dropna()
         if len(turnover_native) < 10:
+            turnover_by_symbol[cache_key] = None
             return None
         fx_to_pln = _fx_to_pln_for_turnover(symbol, instrument_type)
-        return float((turnover_native.tail(10) * fx_to_pln).mean())
+        result = float((turnover_native.tail(10) * fx_to_pln).mean())
+        turnover_by_symbol[cache_key] = result
+        return result
 
     def _passes_fibo_liquidity(r: FiboScanResult) -> bool:
         row = rows_by_key.get((r.ticker, r.direction, r.incline_start_date, r.incline_end_date))

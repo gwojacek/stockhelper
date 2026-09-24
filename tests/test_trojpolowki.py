@@ -164,6 +164,22 @@ def test_allsearch_fibo_reuses_ichimoku_market_data_snapshot():
     assert "with MARKET_REFRESH_LOCK:" in fibo_worker
 
 
+def test_allsearch_worker_defaults_use_all_cpus_except_forex_and_commodities():
+    source = Path("scanner_search.py").read_text(encoding="utf-8")
+    helper = source[
+        source.index("def _allsearch_default_workers"):
+        source.index("def _stale_stock_data_warnings")
+    ]
+
+    assert 'os.getenv("STOCKHELPER_BATCH_MODE") != "1"' in helper
+    assert "available = max(1, os.cpu_count() or 4)" in helper
+    assert 'requested = 3 if group_name.lower() in {"forex", "commodities"} else available' in helper
+    assert source.count("_allsearch_default_workers(group_name,") == 2
+
+    run_source = Path("run").read_text(encoding="utf-8")
+    assert 'os.environ.setdefault("STOCKHELPER_COMMODITIES_WORKERS", "3")' in run_source
+
+
 def test_allsearch_accepts_comma_separated_selected_instruments():
     mod = load_run_module()
 
@@ -1293,6 +1309,42 @@ def test_ichimoku_risk_long_short_and_retest_statuses(tmp_path: Path):
     assert any("**🛢️ GOLD" in row.split(" | ")[1] for row in data_rows)
     assert "[📈 chart]" not in text
     assert "[🔗 stooq](https://stooq.pl/hfg)" in text
+
+
+def test_mature_ichimoku_position_across_kijun_stays_in_watch_column(tmp_path: Path):
+    mod = load_run_module()
+    rows = [
+        mod.ScannerRow(
+            market="WIG",
+            scanner="ICHIMOKU",
+            category="position",
+            ticker="APR",
+            status="⚪ above",
+            dates={"start_date": "2026-01-07"},
+            metrics={
+                "months": "8.5",
+                "ichimoku_status": "Under Kijun-sen",
+                "tk_cross": "bearish TK cross",
+                "raw_status": "above",
+            },
+            chart_url="https://stooq.pl/apr",
+        )
+    ]
+
+    text = mod._write_trojpolowki_ichimoku(
+        rows, tmp_path, datetime(2026, 9, 22, 10, 0, 0)
+    ).read_text(encoding="utf-8")
+    data_row = next(
+        line
+        for line in text.splitlines()
+        if line.startswith("| ") and "AUTOPARTN (APR)" in line
+    )
+    cells = [cell.strip() for cell in data_row.strip("|").split("|")]
+
+    assert cells[0] == ""
+    assert "AUTOPARTN (APR)" in cells[1]
+    assert cells[2] == ""
+    assert cells[3] == ""
 
 
 def test_early_ichimoku_is_hidden_from_3p_until_cutoff(tmp_path: Path):
