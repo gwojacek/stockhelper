@@ -2724,12 +2724,14 @@ def _allsearch_ichimoku_yahoo_probe(
     """Verify three random caches against Yahoo without downgrading newer data."""
     probe_count = min(3, len(members))
     candidates = random.sample(list(members), k=len(members)) if members else []
+    max_probe_attempts = min(len(candidates), max(probe_count, 12))
     print(
         f"[refresh-check] {group_name}: allsearch Ichimoku Yahoo probes "
         f"(need {probe_count} comparable random instrument(s))"
     )
     compared = 0
-    for ticker in candidates:
+    cache_ahead = 0
+    for ticker in candidates[:max_probe_attempts]:
         fetch_symbol, instrument = _search_fetch_symbol(ticker, group_name, exchange_suffix)
         yahoo_symbol = ticker if instrument == "commodity" else fetch_symbol
         try:
@@ -2749,16 +2751,16 @@ def _allsearch_ichimoku_yahoo_probe(
                 # Stooq/bulk can already contain today's session while Yahoo
                 # still exposes yesterday (especially before Yahoo publishes
                 # its daily candle).  The remote source has no newer data to
-                # merge, so this is positive cache-freshness evidence. Counting
-                # it also bounds the probe to three instruments instead of
-                # walking the entire market and eventually forcing a refresh.
-                compared += 1
+                # merge, so it must not force a refresh. Do not count it as a
+                # comparable probe, though: later in the same trading day a
+                # liquid Yahoo symbol may already expose today's changing
+                # candle. Keep looking, bounded to 12 network probes.
+                cache_ahead += 1
                 print(
                     f"[refresh-check] {ticker}: Yahoo {candidate} newest={yahoo_signature[0]} is older "
-                    f"than cached newest={cached_signature[0]}; cache is newer, no refresh needed"
+                    f"than cached newest={cached_signature[0]}; cache is newer, trying another "
+                    f"({cache_ahead}/{max_probe_attempts} cache-ahead)"
                 )
-                if compared >= probe_count:
-                    return False
                 continue
             compared += 1
             matches = (
@@ -2795,6 +2797,13 @@ def _allsearch_ichimoku_yahoo_probe(
             )
             return True
     if compared < probe_count:
+        if cache_ahead:
+            print(
+                f"[refresh-check] {group_name}: found only {compared}/{probe_count} comparable Yahoo probes "
+                f"within {max_probe_attempts} attempts; {cache_ahead} cache(s) were newer than Yahoo -> "
+                "keeping the newer cache"
+            )
+            return False
         print(
             f"[refresh-check] {group_name}: only {compared}/{probe_count} Yahoo probes were comparable; "
             "refreshing the whole market to avoid an unverified cache"
