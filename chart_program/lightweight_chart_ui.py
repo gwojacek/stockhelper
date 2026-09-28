@@ -1341,6 +1341,8 @@ class LightweightChartLevelSelectorUI:
     const idx0 = Number(e0?.idx);
     const idx1 = Number(e1?.idx);
     if (!Number.isFinite(idx0) || !Number.isFinite(idx1) || idx0 === idx1) return fallbackAnchors;
+    const explicitAnchorIndices = fallbackAnchors.map(pt => Number(pt.idx)).filter(Number.isFinite);
+    const anchorsEstablishedAt = explicitAnchorIndices.length ? Math.max(...explicitAnchorIndices) : Math.min(idx0, idx1);
     const touchCandidates = [];
     const start = Math.min(idx0, idx1);
     const end = realCandles.length - 1;
@@ -1359,7 +1361,11 @@ class LightweightChartLevelSelectorUI:
       const touchTolerance = Math.max(Math.abs(lineValue) * 0.00025, Math.abs(lineValue) < 1 ? 0.00025 : 0.0025);
       const close = Number(c.close);
       const breakoutClose = side === 'upper' ? close > lineValue + closeTolerance : close < lineValue - closeTolerance;
-      if (breakoutClose) break;
+      // A projected line can be crossed before its second scanner anchor is
+      // formed.  That older candle cannot be the breakout of a structure that
+      // did not exist yet, and must not hide the later explicit anchor from
+      // diagnostics or breakout validation.
+      if (breakoutClose && idx > anchorsEstablishedAt) break;
       // Preserve the scanner's touch definition: the relevant wick must reach
       // or pierce the trendline and the candle must close back inside.  Do not
       // count body-only intersections or candles that remain under/over the
@@ -1384,6 +1390,11 @@ class LightweightChartLevelSelectorUI:
       points.push(pt);
       lastIdx = pt.idx;
     }});
+    if (fallbackAnchors.length) {{
+      const explicitTimes = new Set(fallbackAnchors.map(pt => pt.time));
+      const merged = points.filter(pt => !explicitTimes.has(pt.time)).concat(fallbackAnchors);
+      return merged.sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0));
+    }}
     const firstAnchor = points.find(pt => pt.local_extreme) || points[0];
     const secondAnchor = firstAnchor ? (points.find(pt => pt !== firstAnchor && pt.idx - firstAnchor.idx > 1 && pt.local_extreme) || points.find(pt => pt !== firstAnchor && pt.idx - firstAnchor.idx > 1)) : null;
     [firstAnchor, secondAnchor].filter(Boolean).forEach(pt => {{ pt.anchor = true; pt.computed_anchor = true; }});

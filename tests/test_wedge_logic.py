@@ -657,6 +657,31 @@ def test_crj_wa_prefers_sloping_structural_boundaries_over_nested_flat_shelf():
     assert setup.breakout_direction == "short"
 
 
+def test_ent_wa_breakout_is_never_reported_before_all_wedge_anchors_exist():
+    df = pd.read_csv(DATA_DIR / "ENT_WA.csv")
+    latest_rows = pd.read_csv(StringIO(
+        "Date,Open,High,Low,Close,Volume\n"
+        "2026-09-23,50.00,50.70,49.85,50.00,7412\n"
+        "2026-09-24,50.30,50.30,49.30,49.35,11556\n"
+        "2026-09-25,49.40,49.45,48.60,48.65,8234\n"
+        "2026-09-28,49.05,49.30,48.50,49.10,8577\n"
+    ))
+    df = pd.concat([df, latest_rows], ignore_index=True).drop_duplicates("Date", keep="last")
+
+    setup = scanner._find_falling_wedge_setup(df)
+
+    assert setup is not None
+    assert setup.upper_end_date == "2026-08-10"
+    if setup.breakout_date != "-":
+        latest_anchor = max(
+            setup.upper_start_date,
+            setup.upper_end_date,
+            setup.lower_start_date,
+            setup.lower_end_date,
+        )
+        assert setup.breakout_date > latest_anchor
+
+
 def test_stale_stock_warning_compares_stock_dates_and_uses_three_day_cutoff(tmp_path, monkeypatch):
     for ticker, latest in (("FRESH", "2026-09-11"), ("TWO", "2026-09-09"), ("STALE", "2026-09-08")):
         pd.DataFrame([{"Date": latest}]).to_csv(tmp_path / f"{ticker}_WA.csv", index=False)

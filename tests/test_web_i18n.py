@@ -416,3 +416,11 @@ def test_favorite_clear_button_uses_neutral_compact_button_styling():
     html = language_controls_html()
     assert ".favorite-clear-btn{margin-left:8px!important;min-width:28px" in html
     assert "background:rgba(120,53,15,.32)" not in html
+
+
+def test_wedge_diagnostics_keep_explicit_scanner_anchors():
+    chart_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert "const anchorsEstablishedAt = explicitAnchorIndices.length" in chart_source
+    assert "if (breakoutClose && idx > anchorsEstablishedAt) break;" in chart_source
+    assert "const merged = points.filter(pt => !explicitTimes.has(pt.time)).concat(fallbackAnchors);" in chart_source
