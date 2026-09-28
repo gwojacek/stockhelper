@@ -831,6 +831,35 @@ def test_fibo_chart_does_not_forward_pattern_from_before_second_anchor():
     assert "--scanner-pattern-date" not in command
 
 
+def test_adbe_chart_fibo_pattern_is_searched_only_after_second_anchor():
+    # Reported live candle after ADBE's 2026-09-01 second anchor.
+    hammer = pd.Series({
+        "Date": pd.Timestamp("2026-09-28"),
+        "Open": 229.67,
+        "High": 231.25,
+        "Low": 224.67,
+        "Close": 230.26,
+    })
+    body = abs(float(hammer["Close"]) - float(hammer["Open"]))
+    candle_range = float(hammer["High"]) - float(hammer["Low"])
+    lower_shadow = min(float(hammer["Open"]), float(hammer["Close"])) - float(hammer["Low"])
+    upper_shadow = float(hammer["High"]) - max(float(hammer["Open"]), float(hammer["Close"]))
+
+    assert hammer["Date"] == pd.Timestamp("2026-09-28")
+    assert lower_shadow > body * 2
+    assert upper_shadow < candle_range * 0.35
+
+    ui_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+    detector = ui_source[
+        ui_source.index("function fibo618PatternFromChart()"):
+        ui_source.index("function scannerCandleBand", ui_source.index("function fibo618PatternFromChart()"))
+    ]
+    assert "const secondAnchorDate" in detector
+    assert "compareTime(second.time, secondAnchorDate) <= 0" in detector
+    assert "direction === 'long'" in detector
+    assert "candlePatternForRow(second, i, ohlc)" in detector
+
+
 def test_acp_impulse_pause_does_not_remove_valid_waiting_fibo():
     frame = _fixture("data/csv/stocks/ACP_WA.csv")
     recent = pd.DataFrame(

@@ -560,6 +560,8 @@ class LightweightChartLevelSelectorUI:
     .instrument-card.collapsed .instrument-hero {{ margin-bottom:0; }}
     .collapsible-side-card.collapsed .side-card-body {{ display:none; }}
     .collapsible-side-card.collapsed .side-card-head {{ margin-bottom:0; }}
+    .collapsible-side-card.collapsed {{ cursor:pointer; }}
+    .collapsible-side-card.collapsed h2,.collapsible-side-card.collapsed h4,.collapsible-side-card.collapsed .identity-sub {{ cursor:text; }}
     .manual-card.collapsed {{ padding:11px; border-radius:16px; }}
     .manual-card.collapsed .side-card-head {{ padding-bottom:0; border-bottom:0; margin-bottom:0; }}
     .identity-row {{ display:flex; align-items:center; gap:7px; min-width:0; }}
@@ -913,6 +915,14 @@ class LightweightChartLevelSelectorUI:
         setSideCardCollapsed(cardId,collapsed);
         persistSideCardStates([cardId]);
       }}
+    }});
+  }});
+  document.querySelectorAll('.collapsible-side-card').forEach(card=>{{
+    card.addEventListener('click',event=>{{
+      if(!card.classList.contains('collapsed'))return;
+      if(event.target.closest('button,a,input,select,textarea,h2,h4,.identity-sub'))return;
+      setSideCardCollapsed(card.id,false);
+      persistSideCardStates([card.id]);
     }});
   }});
 
@@ -1889,27 +1899,23 @@ class LightweightChartLevelSelectorUI:
       const anchorDates = [boundary?.x0, boundary?.x1].filter(Boolean).map(x => String(x).slice(0,10));
       anchorDates.forEach(d => {{ if (!earliestAnchor || d < earliestAnchor) earliestAnchor = d; }});
       const value618 = Number(fib618?.price ?? fib618?.y0);
-      let touch = null;
-      if (Number.isFinite(value618)) {{
-        const since = anchorDates[0] || null;
-        touch = ohlc.find(row => (!since || String(row.time) >= since) && Number(row.low) <= value618 && Number(row.high) >= value618) || null;
-      }}
       const boundaryGeometry=debugGeometryValues(boundary);
       const anchorDatesLine = boundaryGeometry ? `${{String(boundaryGeometry.x0 || '').slice(0,10)}}->${{String(boundaryGeometry.x1 || '').slice(0,10)}}` : '-';
       const anchorValuesLine = boundaryGeometry ? `${{fmt(boundaryGeometry.y0)}}->${{fmt(boundaryGeometry.y1)}}` : '-';
       const scannerPatternDate = scannerMetaValue('__scanner_pattern_date__');
       const scannerPatternName = scannerMetaValue('__scanner_pattern_name__');
-      const scannerPattern = scannerPatternDate && isValidScannerPattern(scannerPatternName) ? `${{scannerPatternLabel(scannerPatternName)}} (${{String(scannerPatternDate).slice(0,10)}}) [scanner]` : '';
+      const secondAnchorDate = anchorDates[1] || '';
+      const scannerPatternAfterImpulse = scannerPatternDate && (!secondAnchorDate || compareTime(scannerPatternDate, secondAnchorDate) > 0);
+      const scannerPattern = scannerPatternAfterImpulse && isValidScannerPattern(scannerPatternName) ? `${{scannerPatternLabel(scannerPatternName)}} (${{String(scannerPatternDate).slice(0,10)}}) [scanner]` : '';
       const chartPattern = fibo618PatternFromChart();
       const recoveredPattern = chartPattern ? `${{scannerPatternLabel(chartPattern.name)}} (${{chartPattern.time}}) [61.8]` : '';
-      const pattern = touch ? candlePatternForRow(touch) : '-';
       lines.push('');
       lines.push(`FIB group: ${{gid}}`);
       lines.push('  FIB anchor:');
       lines.push(`  ${{anchorDatesLine}}`);
       lines.push(`  ${{anchorValuesLine}}`);
       lines.push(`  61.8 value: ${{Number.isFinite(value618) ? fmt(value618) : '-'}}`);
-      lines.push(`  61.8 pattern: ${{scannerPattern || recoveredPattern || (touch && pattern !== '-' ? `${{scannerPatternLabel(pattern)}} (${{touch.time}})` : '-')}}`);
+      lines.push(`  61.8 pattern: ${{scannerPattern || recoveredPattern || '-'}}`);
     }});
     lines.push('');
     lines.push(`CSV candles since first anchor (${{earliestAnchor || '-'}}):`);
@@ -3368,20 +3374,35 @@ class LightweightChartLevelSelectorUI:
       || drawnObjects.find(obj => obj.type === 'fib' && String(obj.label || '').includes('61.8'));
     const level = Number(fib618?.price ?? fib618?.y0);
     if (!Number.isFinite(level)) return null;
+    const boundary = drawnObjects.find(obj => obj.type === 'fib-boundary' && (!fib618?.group_id || obj.group_id === fib618.group_id));
+    const secondAnchorDate = String(boundary?.x1 || '').slice(0,10);
+    const direction = String(fib618?.direction || (Number(boundary?.y1) >= Number(boundary?.y0) ? 'long' : 'short')).toLowerCase();
+    const directionalPattern = name => direction === 'short'
+      ? /shooting star|evening star|bearish|dark cloud cover/i.test(name)
+      : /hammer|morning star|bullish|piercing/i.test(name);
     let found = null;
     for (let i = 1; i < ohlc.length; i += 1) {{
       const first = ohlc[i - 1], second = ohlc[i];
+      if (secondAnchorDate && compareTime(second.time, secondAnchorDate) <= 0) continue;
       const o1 = Number(first.open), h1 = Number(first.high), l1 = Number(first.low), c1 = Number(first.close);
       const o2 = Number(second.open), h2 = Number(second.high), l2 = Number(second.low), c2 = Number(second.close);
       if (![o1, h1, l1, c1, o2, h2, l2, c2].every(Number.isFinite)) continue;
       const touches618 = (l1 <= level && level <= h1) || (l2 <= level && level <= h2);
       const darkCloud = c1 > o1 && c2 < o2 && o2 >= Math.max(o1, c1) * 0.995 && c2 < (o1 + c1) / 2 && c2 > o1 && c2 < level;
+      const bullishEngulfing = c1 < o1 && c2 > o2 && o2 <= c1 && c2 >= o1;
+      const bullishHarami = c1 < o1 && c2 > o2 && Math.min(o1,c1) <= Math.min(o2,c2) && Math.max(o2,c2) <= Math.max(o1,c1);
+      const bullishPiercing = c1 < o1 && c2 > o2 && o2 <= c1 && c2 >= (o1+c1)/2 && c2 < o1;
       const b1 = Math.abs(c1-o1), b2 = Math.abs(c2-o2);
       const lo1 = Math.min(o1,c1), hi1 = Math.max(o1,c1), lo2 = Math.min(o2,c2), hi2 = Math.max(o2,c2);
       const containedBearishHarami = c1 > o1 && c2 < o2 && b2 < b1 && lo1 <= lo2 && hi2 <= hi1;
       const fxMicroBearishHarami = c1 > o1 && c2 < o2 && b1 <= 0.00025 && b2 <= b1*2.05 && lo2 >= lo1-b1 && hi2 <= hi1+b1;
-      if (touches618 && (containedBearishHarami || fxMicroBearishHarami)) found = {{name:'bearish_harami', time:String(second.time).slice(0,10)}};
-      else if (touches618 && darkCloud) found = {{name:'dark_cloud_cover', time:String(second.time).slice(0,10)}};
+      const singlePattern = candlePatternForRow(second, i, ohlc);
+      if (touches618 && direction === 'long' && bullishEngulfing) found = {{name:'bullish_engulfing', time:String(second.time).slice(0,10)}};
+      else if (touches618 && direction === 'long' && bullishPiercing) found = {{name:'bullish_piercing_line', time:String(second.time).slice(0,10)}};
+      else if (touches618 && direction === 'long' && bullishHarami) found = {{name:'bullish_harami', time:String(second.time).slice(0,10)}};
+      else if (touches618 && direction === 'short' && (containedBearishHarami || fxMicroBearishHarami)) found = {{name:'bearish_harami', time:String(second.time).slice(0,10)}};
+      else if (touches618 && direction === 'short' && darkCloud) found = {{name:'dark_cloud_cover', time:String(second.time).slice(0,10)}};
+      else if (l2 <= level && level <= h2 && singlePattern !== '-' && directionalPattern(singlePattern)) found = {{name:singlePattern.replace(/\\s+/g,'_'), time:String(second.time).slice(0,10)}};
     }}
     if (!found) return null;
     const latest = ohlc[ohlc.length - 1]?.time;

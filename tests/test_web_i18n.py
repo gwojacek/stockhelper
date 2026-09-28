@@ -245,6 +245,11 @@ def test_instrument_card_toggle_is_global_and_other_card_toggles_are_local():
     assert "rememberSideCardCollapsed" in chart_source
     assert "persistSideCardStates" in chart_source
     assert "fetch('/sidebar-card-state'" in chart_source
+    assert "document.querySelectorAll('.collapsible-side-card').forEach(card=>" in chart_source
+    assert "if(!card.classList.contains('collapsed'))return;" in chart_source
+    assert "event.target.closest('button,a,input,select,textarea,h2,h4,.identity-sub')" in chart_source
+    assert "setSideCardCollapsed(card.id,false);" in chart_source
+    assert ".collapsible-side-card.collapsed {{ cursor:pointer; }}" in chart_source
     assert '@app.route("/sidebar-card-state", methods=["GET", "POST"])' in chart_source
     assert '<section class="side-card instrument-switcher-card">' in chart_source
     assert POLISH_TRANSLATIONS["Collapse section"] == "Zwiń sekcję"
