@@ -39,6 +39,8 @@ LABELS = {
     "line_cross_value": "LINE_CROSS",
 }
 
+FX_TO_PLN_RATES = {"PLN": 1.0, "USD": 3.92, "EUR": 4.25, "GBP": 5.05}
+
 LINE_COLORS = {
     "gold": "#facc15",
     "purple": "#a855f7",
@@ -931,7 +933,8 @@ class LightweightChartLevelSelectorUI:
 
   const chartInstrumentCurrency = () => {{
     const symbol=String(P.sourceTicker||P.symbol||'').toUpperCase();
-    if(symbol.endsWith('.US'))return 'USD'; if(symbol.endsWith('.DE'))return 'EUR';
+    if(symbol.endsWith('.US')||symbol.includes('USD'))return 'USD';
+    if(['.DE','.F','.FR','.NL','.ES','.IT'].some(suffix=>symbol.endsWith(suffix))||symbol.includes('EUR'))return 'EUR';
     if(symbol.endsWith('.L'))return 'GBP'; return 'PLN';
   }};
   const avg10Turnover = (() => {{
@@ -3722,7 +3725,7 @@ class LightweightChartLevelSelectorUI:
     updateSetupDebugPanel();
   }}
 
-  const FX_TO_PLN = {{PLN:1, USD:3.92, EUR:4.25, GBP:5.05}};
+  const FX_TO_PLN = {json.dumps(FX_TO_PLN_RATES)};
 
   async function loadSharedBalance() {{
     if (!P.reportServer) return;
@@ -4645,6 +4648,7 @@ class LightweightChartLevelSelectorUI:
     chips.push(`<span><b>Position:</b> ${{(data.position_type || $('position-type').value || 'long').toUpperCase()}}</span>`);
     if (Number.isFinite(Number(b.entry))) chips.push(`<span><b>Entry:</b> ${{fmt(Number(b.entry))}}</span>`);
     if (Number.isFinite(Number(b.stop_loss))) chips.push(`<span><b>Stop loss:</b> ${{fmt(Number(b.stop_loss))}}</span>`);
+    if (b.instrument_currency && b.instrument_currency !== currency) chips.push(`<span><b>Price conversion:</b> 1 ${{b.instrument_currency}} = ${{numText(b.instrument_to_calculation_rate, 4)}} ${{currency}}</span>`);
     if (Number.isFinite(Number(b.max_capital))) chips.push(`<span><b>${{b.max_capital_is_avg10d ? 'Max capital to engage (1% Avg10d)' : 'Max capital to engage'}}:</b> ${{money(b.max_capital, b.max_capital_currency || currency)}}</span>`);
     if (data.fx_conversion_fee_applicable) chips.push(`<span><b>FX conversion fee ${{numText(data.fx_conversion_fee_pct || 1, 0)}}%:</b> ${{data.fx_conversion_fee_enabled ? 'ON' : 'OFF'}}</span>`);
     chips.push(`<span><b>Broker commission ${{numText(data.broker_commission_pct ?? 0.2, 2)}}%:</b> ${{data.broker_commission_enabled ? 'ON' : 'OFF'}}</span>`);
@@ -4903,9 +4907,9 @@ class LightweightChartLevelSelectorUI:
 
         def _instrument_currency() -> str:
             source = str(self.source_ticker or self.symbol or "").upper()
-            if source.endswith(".US") or source.endswith(".F") or "USD" in source:
+            if source.endswith(".US") or "USD" in source:
                 return "USD"
-            if source.endswith((".DE", ".FR", ".NL", ".ES", ".IT")) or "EUR" in source:
+            if source.endswith((".DE", ".F", ".FR", ".NL", ".ES", ".IT")) or "EUR" in source:
                 return "EUR"
             if source.endswith(".L") or "GBP" in source:
                 return "GBP"
@@ -4920,6 +4924,10 @@ class LightweightChartLevelSelectorUI:
             broker_commission_pct_display = max(0.0, _num("broker_commission_pct", 0.2))
             broker_commission_pct = broker_commission_pct_display / 100.0 if levels.get("apply_broker_commission") else 0.0
             if effective_instrument == "stock":
+                instrument_currency = _instrument_currency()
+                instrument_to_calculation_rate = FX_TO_PLN_RATES.get(instrument_currency, 1.0) / FX_TO_PLN_RATES.get(currency, 1.0)
+                calculation_entry = entry * instrument_to_calculation_rate
+                calculation_stop_loss = stop_loss * instrument_to_calculation_rate
                 conversion_fee_pct = float(levels.get("currency_conversion_fee_pct", 0.01) or 0.01) if fx_fee_applicable and levels.get("apply_currency_conversion_fee") else 0.0
                 total_transaction_fee_pct = conversion_fee_pct + broker_commission_pct
                 max_capital = capital
@@ -4929,7 +4937,7 @@ class LightweightChartLevelSelectorUI:
                         turnover = (pd.to_numeric(self.df["Close"], errors="coerce") * pd.to_numeric(self.df["Volume"], errors="coerce")).dropna()
                         if len(turnover) >= 10:
                             avg_turnover_10d = float(turnover.tail(10).mean())
-                            max_capital = avg_turnover_10d * 0.01
+                            max_capital = avg_turnover_10d * 0.01 * instrument_to_calculation_rate
                         else:
                             warnings.append("Turnover history is short; max capital uses available capital.")
                     else:
@@ -4937,7 +4945,7 @@ class LightweightChartLevelSelectorUI:
                 except Exception as exc:
                     warnings.append(f"Could not derive turnover max capital: {exc}")
                 for risk in risk_levels:
-                    result = calculate_stock_position(entry, stop_loss, capital, risk, max_capital, conversion_fee_pct=total_transaction_fee_pct, position_type=position_type)
+                    result = calculate_stock_position(calculation_entry, calculation_stop_loss, capital, risk, max_capital, conversion_fee_pct=total_transaction_fee_pct, position_type=position_type)
                     rows.append({
                         "risk": risk,
                         "risk_label": f"{risk * 100:.1f}%",
@@ -4951,7 +4959,9 @@ class LightweightChartLevelSelectorUI:
                     "entry": entry,
                     "stop_loss": stop_loss,
                     "max_capital": round(max_capital, 2),
-                    "max_capital_currency": _instrument_currency(),
+                    "max_capital_currency": currency,
+                    "instrument_currency": instrument_currency,
+                    "instrument_to_calculation_rate": round(instrument_to_calculation_rate, 6),
                     "avg_turnover_10d": None if avg_turnover_10d is None else round(avg_turnover_10d, 2),
                     "max_capital_is_avg10d": avg_turnover_10d is not None,
                 }
@@ -5001,7 +5011,8 @@ class LightweightChartLevelSelectorUI:
                     base = next((r for r in rows if float(r.get("position_size", 0) or 0) > 0), None)
                     if base and float(base.get("potential_loss", 0) or 0) > 0:
                         if base["position_unit"] == "Shares":
-                            profit = float(base["position_size"]) * ((take_profit - entry) if position_type == "long" else (entry - take_profit))
+                            native_profit = float(base["position_size"]) * ((take_profit - entry) if position_type == "long" else (entry - take_profit))
+                            profit = native_profit * instrument_to_calculation_rate
                         else:
                             pip_size = _num("pip_size", 0.0001 if effective_instrument == "forex" else 1.0)
                             pip_value = 1.0 if stock_cfd_mode else _num("pip_value")

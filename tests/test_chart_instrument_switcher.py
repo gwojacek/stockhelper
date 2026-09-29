@@ -165,10 +165,21 @@ def test_chart_sidebar_has_report_compatible_favorite_star_next_to_name():
 def test_position_calculation_displays_one_percent_avg10d_with_market_currency():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 
-    assert "max_capital = avg_turnover_10d * 0.01" in source
-    assert '"max_capital_currency": _instrument_currency()' in source
+    assert "max_capital = avg_turnover_10d * 0.01 * instrument_to_calculation_rate" in source
+    assert '"max_capital_currency": currency' in source
     assert "Max capital to engage (1% Avg10d)" in source
     assert "money(b.max_capital, b.max_capital_currency || currency)" in source
+
+
+def test_stock_position_prices_are_converted_to_the_selected_capital_currency():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert 'FX_TO_PLN_RATES = {"PLN": 1.0, "USD": 3.92, "EUR": 4.25, "GBP": 5.05}' in source
+    assert "calculation_entry = entry * instrument_to_calculation_rate" in source
+    assert "calculation_stop_loss = stop_loss * instrument_to_calculation_rate" in source
+    assert "calculate_stock_position(calculation_entry, calculation_stop_loss" in source
+    assert "profit = native_profit * instrument_to_calculation_rate" in source
+    assert "<b>Price conversion:</b>" in source
 
 
 def test_quick_chart_group_has_market_and_direction_filters():
