@@ -443,6 +443,33 @@ def test_chart_and_drawer_have_a_persisted_drag_splitter():
     assert "#f97316" not in splitter_css
 
 
+def test_position_drawer_does_not_grow_after_repeated_calculations():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "const wasOpen = drawer.classList.contains('open');" in source
+    assert "if (!wasOpen && preferredDrawerHeight <= 0) setDrawerHeight(340);" in source
+    assert "drawer.getBoundingClientRect().height + 10" not in source
+
+
+def test_level_legend_is_updated_when_a_chart_value_changes():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+    add_legend = source[source.index("const addLegend"):source.index("const resetLegend")]
+
+    assert "const existingItem = [...legend.children].find(el => el.dataset.key === legendKey);" in add_legend
+    assert "if (text) text.textContent = label;" in add_legend
+    assert "addLegend(`${{labels[field]}}: ${{fmt(pt.price)}}`" in source
+
+
+def test_broker_commission_control_defaults_off_and_is_sent_to_calculator():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert 'id="broker-fee-toggle"' in source
+    assert 'id="broker-fee-pct" type="number" min="0" step="0.01" value="0.2"' in source
+    assert "levels.apply_broker_commission = !levels.apply_broker_commission" in source
+    assert "total_transaction_fee_pct = conversion_fee_pct + broker_commission_pct" in source
+    assert '"broker_commission_enabled": bool(levels.get("apply_broker_commission"))' in source
+
+
 def test_save_chart_and_png_buttons_have_identical_dimensions():
     source = UI_SOURCE.read_text(encoding="utf-8")
 

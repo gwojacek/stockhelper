@@ -660,11 +660,13 @@ class LightweightChartLevelSelectorUI:
     #setup-debug-btn {{ background:linear-gradient(135deg,rgba(88,28,135,.72),rgba(49,46,129,.80)) !important; border:1px solid #c084fc; box-shadow:0 14px 30px rgba(168,85,247,.18), inset 0 1px 0 rgba(255,255,255,.12); }}
     #journal-toggle-btn {{ background:linear-gradient(135deg,#9a3412,#f59e0b) !important; border:1px solid #fcd34d; box-shadow:0 14px 30px rgba(245,158,11,.20), inset 0 1px 0 rgba(255,255,255,.12); }}
     #journal-toggle-btn .btn-icon {{ background:rgba(254,243,199,.18); color:#fef3c7; }}
-    #currency-fee-toggle {{ min-height:46px !important;padding:9px 64px 9px 12px !important;font-size:14px !important;border-radius:14px !important;background:rgba(15,23,42,.58)!important;border:1px solid rgba(148,163,184,.25)!important;display:flex!important;align-items:center;justify-content:space-between;position:relative; }}
-    #currency-fee-toggle::after {{ content:''; position:absolute; right:12px; top:50%; transform:translateY(-50%); width:42px; height:22px; border-radius:999px; background:#1e293b; box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); }}
-    #currency-fee-toggle::before {{ content:''; position:absolute; right:31px; top:50%; transform:translateY(-50%); width:18px; height:18px; border-radius:50%; background:#cbd5e1; z-index:1; box-shadow:0 2px 8px rgba(0,0,0,.45); transition:right .18s ease, background .18s ease; }}
-    #currency-fee-toggle.active::after {{ background:linear-gradient(90deg,#2563eb,#60a5fa); box-shadow:0 0 18px rgba(96,165,250,.35); }}
-    #currency-fee-toggle.active::before {{ right:15px; background:#fff; }}
+    #currency-fee-toggle,#broker-fee-toggle {{ min-height:46px !important;padding:9px 64px 9px 12px !important;font-size:14px !important;border-radius:14px !important;background:rgba(15,23,42,.58)!important;border:1px solid rgba(148,163,184,.25)!important;display:flex!important;align-items:center;justify-content:space-between;position:relative; }}
+    #currency-fee-toggle::after,#broker-fee-toggle::after {{ content:''; position:absolute; right:12px; top:50%; transform:translateY(-50%); width:42px; height:22px; border-radius:999px; background:#1e293b; box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); }}
+    #currency-fee-toggle::before,#broker-fee-toggle::before {{ content:''; position:absolute; right:31px; top:50%; transform:translateY(-50%); width:18px; height:18px; border-radius:50%; background:#cbd5e1; z-index:1; box-shadow:0 2px 8px rgba(0,0,0,.45); transition:right .18s ease, background .18s ease; }}
+    #currency-fee-toggle.active::after,#broker-fee-toggle.active::after {{ background:linear-gradient(90deg,#2563eb,#60a5fa); box-shadow:0 0 18px rgba(96,165,250,.35); }}
+    #currency-fee-toggle.active::before,#broker-fee-toggle.active::before {{ right:15px; background:#fff; }}
+    .broker-fee-row {{ display:grid;grid-template-columns:1fr 82px;gap:8px;align-items:center;margin-top:8px; }}
+    #broker-fee-pct {{ min-width:0;text-align:center;padding:10px 6px; }}
     #result-box {{ margin-top:12px; padding:14px; border:1px solid rgba(34,197,94,.45); border-radius:16px; background:linear-gradient(135deg,rgba(6,78,59,.45),rgba(2,6,23,.65)); color:#d1fae5; font-weight:800; overflow-wrap:anywhere; }}
     #result-box:empty {{ display:none; }}
     #journal-panel {{ margin-top:12px;padding:14px;border:1px solid rgba(96,165,250,.35);border-radius:18px;background:linear-gradient(145deg, rgba(15,23,42,.98), rgba(2,6,23,.96));box-shadow:0 18px 55px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.06); }}
@@ -681,7 +683,7 @@ class LightweightChartLevelSelectorUI:
     #journal-notes {{ min-height:170px; resize:vertical; }}
     #journal-preview {{ display:none; white-space:pre-wrap;background:rgba(2,6,23,.76);border:1px solid #334155;border-radius:14px;padding:10px;margin-top:10px;color:#dbeafe;font-size:12px;max-height:170px;overflow:auto; }}
     #journal-panel.show-preview #journal-preview {{ display:block; }}
-    .manual-card.journal-open > .side-card-body > label,.manual-card.journal-open > .side-card-body > input,.manual-card.journal-open > .side-card-body > select,.manual-card.journal-open > .side-card-body > #calculation-currency-buttons,.manual-card.journal-open > .side-card-body > #currency-fee-toggle,.manual-card.journal-open > .side-card-body > #object-picker,.manual-card.journal-open > .side-card-body > #delete-object,.manual-card.journal-open > .side-card-body > #calculate-btn,.manual-card.journal-open > .side-card-body > .action-grid,.manual-card.journal-open > .side-card-body > #wedge-debug-panel {{ display:none !important; }}
+    .manual-card.journal-open > .side-card-body > label,.manual-card.journal-open > .side-card-body > input,.manual-card.journal-open > .side-card-body > select,.manual-card.journal-open > .side-card-body > #calculation-currency-buttons,.manual-card.journal-open > .side-card-body > #currency-fee-toggle,.manual-card.journal-open > .side-card-body > .broker-fee-row,.manual-card.journal-open > .side-card-body > #object-picker,.manual-card.journal-open > .side-card-body > #delete-object,.manual-card.journal-open > .side-card-body > #calculate-btn,.manual-card.journal-open > .side-card-body > .action-grid,.manual-card.journal-open > .side-card-body > #wedge-debug-panel {{ display:none !important; }}
     .manual-card.journal-open #journal-panel {{ margin-top:0; padding:16px; min-height:520px; }}
     #journal-close-panel {{ width:auto;margin-left:auto;padding:6px 10px;border-radius:999px;background:#1e293b;border:1px solid #475569;color:#dbeafe;font-size:12px; }}
     .fib-label-contrast {{ color: #f8fafc; text-shadow: 0 1px 2px rgba(0,0,0,.65); }}
@@ -793,6 +795,7 @@ class LightweightChartLevelSelectorUI:
         <label>Calculation currency</label><div id="calculation-currency-buttons"><button type="button" data-currency="PLN">PLN</button><button type="button" data-currency="USD">USD</button><button type="button" data-currency="EUR">EUR</button><button type="button" data-currency="GBP">GBP</button></div><input id="calculation-currency" type="hidden" value="PLN" />
         <div id="max-capital-info" style="display:none;margin-top:8px;padding:10px 12px;border:1px solid #334155;border-radius:10px;background:#0f172a;color:#cbd5e1;font-size:12px"></div>
         <button id="currency-fee-toggle" style="margin-top:8px;width:100%;display:none"></button>
+        <div class="broker-fee-row"><button id="broker-fee-toggle" type="button"></button><input id="broker-fee-pct" type="number" min="0" step="0.01" value="0.2" title="Broker commission percent charged on entry and exit" /></div>
         <label id="lot-cost-label">Lot cost</label><input id="lot-cost" type="number" />
         <label id="pip-value-label">Pip value</label><input id="pip-value" type="number" />
         <label id="spread-mult-label">Spread multiplier (spread = Multiplier * pip_value)</label><input id="spread-mult" type="number" />
@@ -1049,7 +1052,14 @@ class LightweightChartLevelSelectorUI:
     if (!label) return;
     const legend = $('chart-legend');
     const legendKey = key || `${{label}}|${{color}}`;
-    if ([...legend.children].some(el => el.dataset.key === legendKey)) return;
+    const existingItem = [...legend.children].find(el => el.dataset.key === legendKey);
+    if (existingItem) {{
+      const text = existingItem.querySelector('b');
+      const swatch = existingItem.querySelector('i');
+      if (text) text.textContent = label;
+      if (swatch) swatch.style.background = color;
+      return;
+    }}
     const item = document.createElement('span');
     item.dataset.key = legendKey;
     item.classList.toggle('hidden', hiddenLegendKeys.has(legendKey));
@@ -3812,6 +3822,12 @@ class LightweightChartLevelSelectorUI:
     $('currency-fee-toggle').style.display = feeEligible ? 'block' : 'none';
     $('currency-fee-toggle').textContent = `FX conversion fee 1%: ${{levels.apply_currency_conversion_fee ? 'ON' : 'OFF'}}`;
     $('currency-fee-toggle').classList.toggle('active', !!levels.apply_currency_conversion_fee);
+    const brokerFeeInput = $('broker-fee-pct')?.value;
+    const brokerFeePct = brokerFeeInput !== '' && Number.isFinite(Number(brokerFeeInput))
+      ? Math.max(0, Number(brokerFeeInput))
+      : Math.max(0, Number(levels.broker_commission_pct ?? 0.2));
+    $('broker-fee-toggle').textContent = `Broker commission ${{numText(brokerFeePct, 2)}}%: ${{levels.apply_broker_commission ? 'ON' : 'OFF'}}`;
+    $('broker-fee-toggle').classList.toggle('active', !!levels.apply_broker_commission);
   }}
 
   function chartGroupOpenUrl(command) {{
@@ -3952,6 +3968,7 @@ class LightweightChartLevelSelectorUI:
   $('capital').addEventListener('change', saveSharedBalance);
   $('lot-cost').value = levels.lot_cost && levels.lot_cost !== 0 ? levels.lot_cost : ''; $('pip-value').value = levels.__stock_cfd_mode__ ? 1 : ((levels.pip_value && levels.pip_value !== 0) ? levels.pip_value : '');
   $('spread-mult').value = levels.spread_multiplier && levels.spread_multiplier !== 0 ? levels.spread_multiplier : '';
+  $('broker-fee-pct').value = Number(levels.broker_commission_pct ?? 0.2);
   $('tool-line').onclick = () => {{
     if(!scannerWedgeAvailable) {{$('line-tool-group').classList.toggle('kind-open');return;}}
     const same=activeTool==='line';clearPreviews();activeTool=same?'level':'line';activeField=null;fibAnchor=halfAnchor=null;updatePanel();
@@ -3991,6 +4008,8 @@ class LightweightChartLevelSelectorUI:
   $('reset-all').onclick = () => {{ levels = {{}}; levelPoints = {{}}; drawnObjects = []; lineAnchor=fibAnchor=halfAnchor=null; activeTool='level'; activeField=null; $('calculation-currency').value='PLN'; setCalculationCurrencyButtons('PLN'); render(); applyInstrumentControls(); }};
   $('stock-cfd-toggle').onclick = () => {{ levels.__stock_cfd_mode__ = !levels.__stock_cfd_mode__; if (levels.__stock_cfd_mode__) $('pip-value').value = 1; applyInstrumentControls(); }};
   $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
+  $('broker-fee-toggle').onclick = () => {{ levels.apply_broker_commission = !levels.apply_broker_commission; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
+  $('broker-fee-pct').addEventListener('input', () => {{ levels.broker_commission_pct = Math.max(0, Number($('broker-fee-pct').value || 0)); applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }});
   document.querySelectorAll('#calculation-currency-buttons button[data-currency]').forEach(btn => btn.onclick = () => changeCalculationCurrency(btn.dataset.currency || 'PLN', true));
   $('setup-debug-btn').onclick = () => copySetupDebug();
   $('debug-tools').onclick = () => selectedJournalTechnique()==='Kliny'?renderGeometryEditor('wedge'):renderDebugChooser();
@@ -4579,6 +4598,8 @@ class LightweightChartLevelSelectorUI:
       position_type:$('position-type').value,
       capital:roundPrice(Number($('capital').value || 255000)),
       calculation_currency:String($('calculation-currency').value || 'PLN').toUpperCase(),
+      apply_broker_commission:!!levels.apply_broker_commission,
+      broker_commission_pct:$('broker-fee-pct').value !== '' && Number.isFinite(Number($('broker-fee-pct').value)) ? Math.max(0,Number($('broker-fee-pct').value)) : 0.2,
       lot_cost:roundPrice(Number($('lot-cost').value || 0)),
       pip_value:Number(pipValue.toFixed(4)),
       spread_multiplier:Number(spreadMult.toFixed(4)),
@@ -4599,6 +4620,7 @@ class LightweightChartLevelSelectorUI:
   }}
   function renderCalculation(data) {{
     const drawer = $('calc-drawer'), summary = $('calc-summary'), table = $('calc-table'), warnings = $('calc-warnings');
+    const wasOpen = drawer.classList.contains('open');
     $('calc-title').textContent='Position calculation';
     drawer.querySelector('.calc-toolbar')?.classList.remove('debug-instrument');
     $('debug-report-identity').textContent='';
@@ -4625,6 +4647,7 @@ class LightweightChartLevelSelectorUI:
     if (Number.isFinite(Number(b.stop_loss))) chips.push(`<span><b>Stop loss:</b> ${{fmt(Number(b.stop_loss))}}</span>`);
     if (Number.isFinite(Number(b.max_capital))) chips.push(`<span><b>${{b.max_capital_is_avg10d ? 'Max capital to engage (1% Avg10d)' : 'Max capital to engage'}}:</b> ${{money(b.max_capital, b.max_capital_currency || currency)}}</span>`);
     if (data.fx_conversion_fee_applicable) chips.push(`<span><b>FX conversion fee ${{numText(data.fx_conversion_fee_pct || 1, 0)}}%:</b> ${{data.fx_conversion_fee_enabled ? 'ON' : 'OFF'}}</span>`);
+    chips.push(`<span><b>Broker commission ${{numText(data.broker_commission_pct ?? 0.2, 2)}}%:</b> ${{data.broker_commission_enabled ? 'ON' : 'OFF'}}</span>`);
     if (Number.isFinite(Number(b.lot_cost))) chips.push(`<span><b>Lot cost:</b> ${{money(b.lot_cost, currency)}}</span>`);
     if (Number.isFinite(Number(b.spread))) chips.push(`<span><b>Spread:</b> ${{numText(b.spread, 4)}}</span>`);
     if (data.take_profit != null) chips.push(`<span><b>Take profit:</b> ${{fmt(Number(data.take_profit))}}</span>`);
@@ -4634,11 +4657,8 @@ class LightweightChartLevelSelectorUI:
     summary.innerHTML = chips.join('');
     table.innerHTML = `<table><thead><tr><th>Risk Level</th><th>Position Size</th><th>Engaged Capital</th><th>Potential Loss With Spread</th><th>Loss %</th></tr></thead><tbody>${{(data.rows||[]).map(r => `<tr><td>${{r.risk_label}}</td><td>${{numText(r.position_size, r.position_unit === 'Shares' ? 0 : 3)}} ${{r.position_unit}}</td><td>${{money(r.capital_used, currency)}}</td><td>${{money(r.potential_loss, currency)}}</td><td>${{numText(r.loss_percent, 2)}}%</td></tr>`).join('')}}</tbody></table>`;
     warnings.innerHTML = (data.warnings || []).map(w => `<div>⚠️ ${{w}}</div>`).join('');
-    requestAnimationFrame(() => {{
-      document.documentElement.style.setProperty('--calc-drawer-height', `${{Math.ceil(drawer.getBoundingClientRect().height + 10)}}px`);
-      window.dispatchEvent(new Event('resize'));
-      applyVerticalPan();
-    }});
+    if (!wasOpen && preferredDrawerHeight <= 0) setDrawerHeight(340);
+    requestAnimationFrame(() => {{ window.dispatchEvent(new Event('resize')); applyVerticalPan(); }});
   }}
   async function calculatePosition(show=true) {{
     const current = collectLevelsForSave(false);
@@ -4897,8 +4917,11 @@ class LightweightChartLevelSelectorUI:
         try:
             stock_currency_matches = effective_instrument == "stock" and currency == _instrument_currency()
             fx_fee_applicable = bool(levels.get("__currency_fee_eligible__")) and not stock_currency_matches
+            broker_commission_pct_display = max(0.0, _num("broker_commission_pct", 0.2))
+            broker_commission_pct = broker_commission_pct_display / 100.0 if levels.get("apply_broker_commission") else 0.0
             if effective_instrument == "stock":
                 conversion_fee_pct = float(levels.get("currency_conversion_fee_pct", 0.01) or 0.01) if fx_fee_applicable and levels.get("apply_currency_conversion_fee") else 0.0
+                total_transaction_fee_pct = conversion_fee_pct + broker_commission_pct
                 max_capital = capital
                 avg_turnover_10d = None
                 try:
@@ -4914,7 +4937,7 @@ class LightweightChartLevelSelectorUI:
                 except Exception as exc:
                     warnings.append(f"Could not derive turnover max capital: {exc}")
                 for risk in risk_levels:
-                    result = calculate_stock_position(entry, stop_loss, capital, risk, max_capital, conversion_fee_pct=conversion_fee_pct, position_type=position_type)
+                    result = calculate_stock_position(entry, stop_loss, capital, risk, max_capital, conversion_fee_pct=total_transaction_fee_pct, position_type=position_type)
                     rows.append({
                         "risk": risk,
                         "risk_label": f"{risk * 100:.1f}%",
@@ -4942,6 +4965,7 @@ class LightweightChartLevelSelectorUI:
                 if pip_value <= 0:
                     return {"ok": False, "error": "Pip value must be greater than zero before calculating."}
                 conversion_fee_pct = float(levels.get("currency_conversion_fee_pct", 0.01) or 0.01) if levels.get("apply_currency_conversion_fee") else 0.0
+                total_transaction_fee_pct = conversion_fee_pct + broker_commission_pct
                 for risk in risk_levels:
                     result = calculate_position_size(
                         entry=entry,
@@ -4954,7 +4978,7 @@ class LightweightChartLevelSelectorUI:
                         pip_size=pip_size,
                         position_type=position_type,
                         instrument_type=effective_instrument,
-                        conversion_fee_pct=conversion_fee_pct,
+                        conversion_fee_pct=total_transaction_fee_pct,
                     )
                     rows.append({
                         "risk": risk,
@@ -4982,6 +5006,10 @@ class LightweightChartLevelSelectorUI:
                             pip_size = _num("pip_size", 0.0001 if effective_instrument == "forex" else 1.0)
                             pip_value = 1.0 if stock_cfd_mode else _num("pip_value")
                             profit = abs(take_profit - entry) / pip_size * float(base["position_size"]) * pip_value
+                        if broker_commission_pct > 0:
+                            entry_notional = float(base.get("capital_used", 0.0) or 0.0)
+                            exit_notional = entry_notional * abs(take_profit / entry) if entry else entry_notional
+                            profit -= (entry_notional + exit_notional) * broker_commission_pct
                         profit_percent = (profit / capital) * 100 if capital else None
                         risk_reward = profit / float(base["potential_loss"])
                 except Exception as exc:
@@ -5002,6 +5030,8 @@ class LightweightChartLevelSelectorUI:
                 "fx_conversion_fee_applicable": fx_fee_applicable,
                 "fx_conversion_fee_enabled": bool(levels.get("apply_currency_conversion_fee")) and fx_fee_applicable,
                 "fx_conversion_fee_pct": round(float(levels.get("currency_conversion_fee_pct", 0.01) or 0.01) * 100, 2),
+                "broker_commission_enabled": bool(levels.get("apply_broker_commission")),
+                "broker_commission_pct": round(broker_commission_pct_display, 4),
                 "rows": rows,
                 "basics": basics,
                 "take_profit": None if take_profit is None else round(float(take_profit), self._precision_for_price(take_profit)),
