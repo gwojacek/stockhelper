@@ -43,7 +43,7 @@ def test_manual_wedge_anchor_uses_real_candle_anchors_not_future_display_extensi
     )
 
 
-def test_saved_drawing_kinds_recognizes_manual_scanner_overrides(tmp_path, monkeypatch):
+def test_unmarked_legacy_wedge_preview_does_not_override_new_scanner_result(tmp_path, monkeypatch):
     monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
     sessions = tmp_path / "sessions"
     sessions.mkdir()
@@ -54,7 +54,7 @@ def test_saved_drawing_kinds_recognizes_manual_scanner_overrides(tmp_path, monke
         ]
     }), encoding="utf-8")
 
-    assert scanner._saved_drawing_kinds_for_ticker("KLIN.WA") == {"wedge", "fibo"}
+    assert scanner._saved_drawing_kinds_for_ticker("KLIN.WA") == {"fibo"}
 
 
 def test_wedge_only_save_is_available_to_wedge_scanner_without_saving_chart(tmp_path, monkeypatch):

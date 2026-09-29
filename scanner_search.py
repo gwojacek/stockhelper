@@ -5488,11 +5488,12 @@ def _saved_drawing_kinds_for_ticker(ticker: str) -> set[str]:
     if not isinstance(objects, list):
         objects = []
     kinds: set[str] = set()
-    # ``False`` is written by new scanner preloads.  Missing is deliberately
-    # treated as saved for compatibility with sessions created before the
-    # marker existed; the next chart save migrates those sessions to ``True``.
+    # ``False`` is written by new scanner preloads. Legacy wedge objects with a
+    # missing marker are also scanner previews, not durable user overrides;
+    # otherwise an obsolete line can own every later allsearch result forever.
+    # Fibo keeps its legacy compatibility behavior separately.
     saved_fibo_active = state.get("__saved_fibo_by_user__") is not False
-    saved_wedge_active = state.get("__saved_wedge_by_user__") is not False
+    saved_wedge_active = state.get("__saved_wedge_by_user__") is True
     if saved_wedge_active and isinstance(state.get("__saved_manual_wedges__"), list) and len(state["__saved_manual_wedges__"]) >= 2:
         kinds.add("wedge")
     for obj in objects:
