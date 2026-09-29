@@ -184,13 +184,13 @@ def test_stock_position_prices_are_converted_to_the_selected_capital_currency():
     assert "'Broker FX rate' : 'Market FX rate'" in source
 
 
-def test_broker_fx_rate_uses_current_market_rate_plus_half_percent():
+def test_broker_fx_rate_uses_current_market_rate_plus_round_trip_one_percent():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 
-    assert "BROKER_FX_MARKUP_PCT = 0.005" in source
+    assert "BROKER_FX_ROUND_TRIP_MARKUP_PCT = 0.01" in source
     assert "market_conversion_rate * (1.0 + fx_markup_pct)" in source
     assert "total_transaction_fee_pct = broker_commission_pct" in source
-    assert "Broker FX markup 0.5%" in source
+    assert "FX conversion 1% (2 × 0.5%)" in source
 
 
 def test_quick_chart_group_has_market_and_direction_filters():

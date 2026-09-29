@@ -41,7 +41,7 @@ LABELS = {
 }
 
 FX_TO_PLN_FALLBACK_RATES = {"PLN": 1.0, "USD": 3.92, "EUR": 4.25, "GBP": 5.05}
-BROKER_FX_MARKUP_PCT = 0.005
+BROKER_FX_ROUND_TRIP_MARKUP_PCT = 0.01
 
 
 def _current_fx_to_pln_rates() -> dict[str, float]:
@@ -3845,7 +3845,7 @@ class LightweightChartLevelSelectorUI:
     setFieldState('pip-value', disabled || stockCfdOn, !disabled && !stockCfdOn);
     $('spread-mult-label').textContent = stockCfdOn ? 'Spread (price units; pips = spread / 0.01)' : 'Spread multiplier (spread = Multiplier * pip_value)';
     $('currency-fee-toggle').style.display = feeEligible ? 'block' : 'none';
-    $('currency-fee-toggle').textContent = `Broker FX markup 0.5%: ${{levels.apply_currency_conversion_fee ? 'ON' : 'OFF'}}`;
+    $('currency-fee-toggle').textContent = `FX conversion 1% (2 × 0.5%): ${{levels.apply_currency_conversion_fee ? 'ON' : 'OFF'}}`;
     $('currency-fee-toggle').classList.toggle('active', !!levels.apply_currency_conversion_fee);
     const brokerFeeInput = $('broker-fee-pct')?.value;
     const brokerFeePct = brokerFeeInput !== '' && Number.isFinite(Number(brokerFeeInput))
@@ -4672,7 +4672,7 @@ class LightweightChartLevelSelectorUI:
     if (Number.isFinite(Number(b.stop_loss))) chips.push(`<span><b>Stop loss:</b> ${{fmt(Number(b.stop_loss))}}</span>`);
     if (b.instrument_currency && b.instrument_currency !== currency) chips.push(`<span><b>${{data.fx_conversion_fee_enabled ? 'Broker FX rate' : 'Market FX rate'}}:</b> 1 ${{b.instrument_currency}} = ${{numText(b.instrument_to_calculation_rate, 4)}} ${{currency}}</span>`);
     if (Number.isFinite(Number(b.max_capital))) chips.push(`<span><b>${{b.max_capital_is_avg10d ? 'Max capital to engage (1% Avg10d)' : 'Max capital to engage'}}:</b> ${{money(b.max_capital, b.max_capital_currency || currency)}}</span>`);
-    if (data.fx_conversion_fee_applicable) chips.push(`<span><b>Broker FX markup ${{numText(data.fx_conversion_fee_pct ?? 0.5, 1)}}%:</b> ${{data.fx_conversion_fee_enabled ? 'ON' : 'OFF'}}</span>`);
+    if (data.fx_conversion_fee_applicable) chips.push(`<span><b>FX conversion ${{numText(data.fx_conversion_fee_pct ?? 1, 1)}}% (2 × 0.5%):</b> ${{data.fx_conversion_fee_enabled ? 'ON' : 'OFF'}}</span>`);
     chips.push(`<span><b>Broker commission ${{numText(data.broker_commission_pct ?? 0.2, 2)}}%:</b> ${{data.broker_commission_enabled ? 'ON' : 'OFF'}}</span>`);
     if (Number.isFinite(Number(b.lot_cost))) chips.push(`<span><b>Lot cost:</b> ${{money(b.lot_cost, currency)}}</span>`);
     if (Number.isFinite(Number(b.spread))) chips.push(`<span><b>Spread:</b> ${{numText(b.spread, 4)}}</span>`);
@@ -4949,7 +4949,7 @@ class LightweightChartLevelSelectorUI:
                 instrument_currency = _instrument_currency()
                 fx_to_pln = _current_fx_to_pln_rates()
                 market_conversion_rate = fx_to_pln.get(instrument_currency, 1.0) / fx_to_pln.get(currency, 1.0)
-                fx_markup_pct = BROKER_FX_MARKUP_PCT if fx_fee_applicable and levels.get("apply_currency_conversion_fee") else 0.0
+                fx_markup_pct = BROKER_FX_ROUND_TRIP_MARKUP_PCT if fx_fee_applicable and levels.get("apply_currency_conversion_fee") else 0.0
                 instrument_to_calculation_rate = market_conversion_rate * (1.0 + fx_markup_pct)
                 calculation_entry = entry * instrument_to_calculation_rate
                 calculation_stop_loss = stop_loss * instrument_to_calculation_rate
@@ -5064,7 +5064,7 @@ class LightweightChartLevelSelectorUI:
                 "currency": currency,
                 "fx_conversion_fee_applicable": fx_fee_applicable,
                 "fx_conversion_fee_enabled": bool(levels.get("apply_currency_conversion_fee")) and fx_fee_applicable,
-                "fx_conversion_fee_pct": BROKER_FX_MARKUP_PCT * 100,
+                "fx_conversion_fee_pct": BROKER_FX_ROUND_TRIP_MARKUP_PCT * 100,
                 "broker_commission_enabled": bool(levels.get("apply_broker_commission")),
                 "broker_commission_pct": round(broker_commission_pct_display, 4),
                 "rows": rows,
