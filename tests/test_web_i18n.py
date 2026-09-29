@@ -431,6 +431,6 @@ def test_burnt_scanner_wedge_is_reanchored_on_chart_load():
 
     assert "function scannerWedgeNeedsReanchor()" in chart_source
     assert "idx < rows.length - 5" in chart_source
-    assert "levels.__saved_wedge_by_user__ === true" in chart_source
+    assert "if (wedgeOnlySavedForScanner || !scannerWedgeNeedsReanchor()) return false;" in chart_source
     assert "const candidate = findAlternativeWedgeCandidate('both');" in chart_source
     assert "scannerWedgePreloaded && reanchorInvalidScannerWedge()" in chart_source

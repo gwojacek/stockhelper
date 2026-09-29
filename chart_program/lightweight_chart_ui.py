@@ -3211,7 +3211,11 @@ class LightweightChartLevelSelectorUI:
   }}
 
   function reanchorInvalidScannerWedge() {{
-    if (levels.__saved_wedge_by_user__ === true || !scannerWedgeNeedsReanchor()) return false;
+    // Only the dedicated manual-wedge save is authoritative here. Historical
+    // chart sessions sometimes marked an automatic scanner preview as saved,
+    // even though the user never created manual anchors; that stale flag must
+    // not prevent repair of a visibly burnt line.
+    if (wedgeOnlySavedForScanner || !scannerWedgeNeedsReanchor()) return false;
     const candidate = findAlternativeWedgeCandidate('both');
     if (!candidate) return false;
     drawnObjects = drawnObjects.filter(obj => !isWedgeLineObject(obj)).concat(wedgeLineThroughExtremeObjects(candidate));
