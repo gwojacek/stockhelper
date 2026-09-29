@@ -821,6 +821,19 @@ def run_level_selector(raw_args=None):
         if lower is None:
             return False
 
+        def _legacy_scanner_projection(obj) -> bool:
+            anchor_x = obj.get("anchor_x")
+            anchor_y = obj.get("anchor_y")
+            has_real_anchors = isinstance(anchor_x, list) and isinstance(anchor_y, list) and len(anchor_x) >= 2 and len(anchor_y) >= 2
+            return (
+                not has_real_anchors
+                and obj.get("group_id") == "auto-wedge"
+                and str(obj.get("label", "")).lower().startswith("falling wedge")
+            )
+
+        if _legacy_scanner_projection(upper) or _legacy_scanner_projection(lower):
+            return False
+
         def _anchors(obj):
             ax = obj.get("anchor_x")
             ay = obj.get("anchor_y")

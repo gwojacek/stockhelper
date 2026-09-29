@@ -5941,6 +5941,15 @@ def _manual_wedge_anchor(obj: dict) -> tuple[tuple[str, float], tuple[str, float
             return (str(anchor_x[0]), float(anchor_y[0])), (str(anchor_x[1]), float(anchor_y[1]))
         except Exception:
             return None
+    # Older scanner previews stored only their projected display endpoints.
+    # Their future x1 is not a second candle anchor, so treating it as one makes
+    # the stale line appear newly established and hides every earlier break.
+    # A real manual line has a user label ("My ... wedge") or explicit anchors.
+    if (
+        obj.get("group_id") == "auto-wedge"
+        and str(obj.get("label", "")).lower().startswith("falling wedge")
+    ):
+        return None
     try:
         return (str(obj["x0"]), float(obj["y0"])), (str(obj["x1"]), float(obj["y1"]))
     except Exception:

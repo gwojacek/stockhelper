@@ -43,6 +43,39 @@ def test_manual_wedge_anchor_uses_real_candle_anchors_not_future_display_extensi
     )
 
 
+def test_legacy_auto_wedge_projection_is_not_a_manual_anchor_pair():
+    obj = {
+        "id": "auto-wedge-upper",
+        "type": "wedge",
+        "group_id": "auto-wedge",
+        "label": "Falling wedge upper",
+        "x0": "2026-02-27",
+        "y0": 61.65,
+        "x1": "2026-10-14",
+        "y1": 48.37,
+    }
+
+    assert scanner._manual_wedge_anchor(obj) is None
+
+
+def test_explicit_save_marker_cannot_promote_legacy_scanner_projection(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    objects = [
+        {"id": "auto-wedge-upper", "type": "wedge", "group_id": "auto-wedge", "label": "Falling wedge upper", "x0": "2026-02-27", "y0": 61.65, "x1": "2026-10-14", "y1": 48.37},
+        {"id": "auto-wedge-lower", "type": "wedge", "group_id": "auto-wedge", "label": "Falling wedge lower", "x0": "2026-07-14", "y0": 46.79, "x1": "2026-10-14", "y1": 48.86},
+    ]
+    (sessions / "ENT.json").write_text(json.dumps({
+        "__saved_wedge_by_user__": True,
+        "drawn_objects": objects,
+    }), encoding="utf-8")
+    df = pd.read_csv(DATA_DIR / "ENT_WA.csv")
+
+    assert scanner._saved_drawing_kinds_for_ticker("ENT.WA") == {"wedge"}
+    assert scanner._find_manual_unbroken_wedge_setup(df, "ENT.WA") is None
+
+
 def test_unmarked_legacy_wedge_preview_does_not_override_new_scanner_result(tmp_path, monkeypatch):
     monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
     sessions = tmp_path / "sessions"
