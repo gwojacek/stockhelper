@@ -424,3 +424,13 @@ def test_wedge_diagnostics_keep_explicit_scanner_anchors():
     assert "const anchorsEstablishedAt = explicitAnchorIndices.length" in chart_source
     assert "if (breakoutClose && idx > anchorsEstablishedAt) break;" in chart_source
     assert "const merged = points.filter(pt => !explicitTimes.has(pt.time)).concat(fallbackAnchors);" in chart_source
+
+
+def test_burnt_scanner_wedge_is_reanchored_on_chart_load():
+    chart_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert "function scannerWedgeNeedsReanchor()" in chart_source
+    assert "idx < rows.length - 5" in chart_source
+    assert "levels.__saved_wedge_by_user__ === true" in chart_source
+    assert "const candidate = findAlternativeWedgeCandidate('both');" in chart_source
+    assert "scannerWedgePreloaded && reanchorInvalidScannerWedge()" in chart_source

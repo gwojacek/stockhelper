@@ -3184,6 +3184,41 @@ class LightweightChartLevelSelectorUI:
     return chosen || null;
   }}
 
+  function scannerWedgeNeedsReanchor() {{
+    const rows = ohlc.filter(r => r && r.time && Number.isFinite(Number(r.close)));
+    const wedges = drawnObjects.filter(isWedgeLineObject);
+    const upper = wedges.find(obj => wedgeSide(obj) === 'upper');
+    const lower = wedges.find(obj => wedgeSide(obj) === 'lower');
+    if (!upper || !lower || rows.length < 8) return false;
+    const indexByDate = new Map(rows.map((row, idx) => [String(row.time).slice(0, 10), idx]));
+    const anchorIndices = [upper, lower].flatMap(obj => (obj.anchor_x || []).map(date => indexByDate.get(String(date).slice(0, 10)))).filter(Number.isFinite);
+    if (anchorIndices.length < 4) return false;
+    const establishedAt = Math.max(...anchorIndices);
+    const ranges = rows.slice(-30).map(row => Number(row.high) - Number(row.low)).filter(Number.isFinite);
+    const avgRange = ranges.length ? ranges.reduce((sum, value) => sum + value, 0) / ranges.length : 0;
+    const tolerance = Math.max(avgRange * 0.08, Math.abs(Number(rows.at(-1).close)) * 0.0005);
+    // The latest five sessions may be the live breakout. Older closes through
+    // either boundary mean the supplied anchors describe a burnt/incorrect
+    // wedge and should be replaced with a clean pair of candle extremes.
+    for (let idx = establishedAt + 1; idx < rows.length - 5; idx += 1) {{
+      const row = rows[idx];
+      const upperValue = lineValueForDate(upper, row.time);
+      const lowerValue = lineValueForDate(lower, row.time);
+      if (!Number.isFinite(upperValue) || !Number.isFinite(lowerValue)) continue;
+      if (Number(row.close) > upperValue + tolerance || Number(row.close) < lowerValue - tolerance) return true;
+    }}
+    return false;
+  }}
+
+  function reanchorInvalidScannerWedge() {{
+    if (levels.__saved_wedge_by_user__ === true || !scannerWedgeNeedsReanchor()) return false;
+    const candidate = findAlternativeWedgeCandidate('both');
+    if (!candidate) return false;
+    drawnObjects = drawnObjects.filter(obj => !isWedgeLineObject(obj)).concat(wedgeLineThroughExtremeObjects(candidate));
+    wedgeRouletteNoAlternative = false;
+    return true;
+  }}
+
   function restoreScannerWedgeFromRoulette() {{
     const scannerWedges=initialScannerDrawnObjects.filter(isWedgeLineObject);
     if (scannerWedges.length < 2) return false;
@@ -4796,6 +4831,7 @@ class LightweightChartLevelSelectorUI:
   if (!P.reportLaunched) {{ window.addEventListener('beforeunload', () => navigator.sendBeacon('/shutdown')); }}
   setupChartGroupNav();
   const scannerWedgePreloaded = initialScannerDrawnObjects.some(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge');
+  const scannerWedgeReanchored = scannerWedgePreloaded && reanchorInvalidScannerWedge();
 
   $('chart-wrap')?.addEventListener('mousemove', (ev) => {{
     const tip = $('scanner-highlight-tooltip');
@@ -4811,7 +4847,7 @@ class LightweightChartLevelSelectorUI:
   }});
   $('chart-wrap')?.addEventListener('mouseleave', () => {{ const tip = $('scanner-highlight-tooltip'); if (tip) tip.style.display = 'none'; }});
 
-  applyWedgeDerivedLevels(scannerWedgePreloaded); applyScannerSetupStopLoss(true); applyInstrumentControls(); render(); refreshFavoriteStar(); syncFavoritesFromReport();
+  applyWedgeDerivedLevels(scannerWedgePreloaded || scannerWedgeReanchored); applyScannerSetupStopLoss(true); applyInstrumentControls(); render(); refreshFavoriteStar(); syncFavoritesFromReport();
 }})();
   </script>
 </body>
