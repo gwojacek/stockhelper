@@ -657,7 +657,7 @@ def test_crj_wa_prefers_sloping_structural_boundaries_over_nested_flat_shelf():
     assert setup.breakout_direction == "short"
 
 
-def test_ent_wa_breakout_is_never_reported_before_all_wedge_anchors_exist():
+def test_ent_wa_uses_major_upper_rebound_and_latest_deeper_support_anchor():
     df = pd.read_csv(DATA_DIR / "ENT_WA.csv")
     latest_rows = pd.read_csv(StringIO(
         "Date,Open,High,Low,Close,Volume\n"
@@ -665,21 +665,21 @@ def test_ent_wa_breakout_is_never_reported_before_all_wedge_anchors_exist():
         "2026-09-24,50.30,50.30,49.30,49.35,11556\n"
         "2026-09-25,49.40,49.45,48.60,48.65,8234\n"
         "2026-09-28,49.05,49.30,48.50,49.10,8577\n"
+        "2026-09-29,48.60,50.10,48.60,49.35,1541\n"
     ))
     df = pd.concat([df, latest_rows], ignore_index=True).drop_duplicates("Date", keep="last")
 
     setup = scanner._find_falling_wedge_setup(df)
 
     assert setup is not None
+    assert setup.upper_start_date == "2026-01-23"
+    assert setup.upper_start_price == pytest.approx(64.0406)
     assert setup.upper_end_date == "2026-08-10"
-    if setup.breakout_date != "-":
-        latest_anchor = max(
-            setup.upper_start_date,
-            setup.upper_end_date,
-            setup.lower_start_date,
-            setup.lower_end_date,
-        )
-        assert setup.breakout_date > latest_anchor
+    assert setup.upper_end_price == pytest.approx(55.1514)
+    assert setup.lower_start_date == "2026-07-14"
+    assert setup.lower_end_date == "2026-09-17"
+    assert setup.breakout_date == "-"
+    assert setup.breakout_direction == "-"
 
 
 def test_stale_stock_warning_compares_stock_dates_and_uses_three_day_cutoff(tmp_path, monkeypatch):

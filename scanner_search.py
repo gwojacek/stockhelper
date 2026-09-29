@@ -6202,6 +6202,7 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
             key=lambda j: (0 if j == high_abs else 1, -float(highs[j]), j),
         )[:12]
         upper_anchor_pairs: list[tuple[int, int]] = []
+        major_span_upper_pairs: list[tuple[int, int]] = []
         for uh1 in upper_anchor1_candidates:
             upper_anchor2_candidates: list[int] = []
             for j in range(uh1 + 5, end - 4):
@@ -6219,10 +6220,19 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
             )
             selected_upper_anchor2 = list(dict.fromkeys(upper_anchor2_candidates[:8] + active_upper_anchor2_candidates[:8]))
             upper_anchor_pairs.extend((uh1, uh2) for uh2 in selected_upper_anchor2)
-        upper_anchor_pairs = sorted(
+            if uh1 == high_abs and upper_anchor2_candidates:
+                # Preserve the strongest established rebound from the recent
+                # quarter. Ranking only by absolute height plus very recent
+                # anchors can omit the decisive confirmation (ENT.WA's January
+                # top -> August rebound), leaving a nested February line.
+                established_recent = [j for j in upper_anchor2_candidates if end - 90 <= j <= end - 15]
+                if established_recent:
+                    major_span_upper_pairs.append((uh1, max(established_recent, key=lambda j: float(highs[j]))))
+        ranked_upper_anchor_pairs = sorted(
             set(upper_anchor_pairs),
             key=lambda pair: (0 if pair[0] == high_abs else 1, min(abs(end - pair[1]), 80), -float(highs[pair[0]]), -float(highs[pair[1]]), pair[1]),
-        )[:24]
+        )
+        upper_anchor_pairs = list(dict.fromkeys(ranked_upper_anchor_pairs[:24] + major_span_upper_pairs))
         if not upper_anchor_pairs:
             continue
 
@@ -6542,6 +6552,18 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                     if i not in lower_anchor_indices and i > max(lower_anchor_indices) and closes[i] >= lo - close_eps:
                         lower_touch_tol = min(tol, _post_anchor_touch_tolerance(lo))
                         lower_exact_tol = min(exact_tol, lower_touch_tol)
+                        continues_touch_cluster = bool(lower_contacts) and i - max(lower_contacts) <= 1
+                        if (
+                            _is_local_extreme(i, "lower")
+                            and lows[i] < lo - lower_exact_tol
+                            and not continues_touch_cluster
+                        ):
+                            # A later, visibly deeper swing low supersedes the
+                            # old support anchor. Keeping the steeper old line
+                            # can manufacture a false breakdown a few candles
+                            # later (ENT.WA Sep 15 vs Sep 17).
+                            invalid = True
+                            break
                         if _is_local_extreme(i, "lower") and abs(lows[i] - lo) <= lower_exact_tol:
                             lower_exact_contacts.append(i)
                             lower_contacts.append(i)
