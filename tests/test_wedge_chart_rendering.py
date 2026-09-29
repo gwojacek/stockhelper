@@ -13,6 +13,12 @@ SCANNER_SOURCE = Path(__file__).resolve().parents[1] / "scanner_search.py"
 LEVEL_SELECTOR_SOURCE = Path(__file__).resolve().parents[1] / "chart_program" / "level_selector.py"
 
 
+def test_fresh_scanner_wedge_replaces_unmarked_legacy_preview():
+    selector_source = LEVEL_SELECTOR_SOURCE.read_text(encoding="utf-8")
+
+    assert 'existing.get("__saved_wedge_by_user__") is not True' in selector_source
+
+
 def test_lightweight_fibonacci_drawings_include_23_6_for_scanner_and_manual_groups():
     source = UI_SOURCE.read_text(encoding="utf-8")
     selector_source = LEVEL_SELECTOR_SOURCE.read_text(encoding="utf-8")

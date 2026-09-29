@@ -802,7 +802,11 @@ def run_level_selector(raw_args=None):
 
 
     def _saved_wedge_is_active() -> bool:
-        if existing.get("__saved_wedge_by_user__") is False:
+        # Scanner previews from older sessions may have wedge objects without
+        # the marker. They must not override fresh scanner anchors forever.
+        # Only an explicit user save is authoritative; dedicated wedge-only
+        # saves are handled separately below.
+        if existing.get("__saved_wedge_by_user__") is not True:
             return False
         objects = existing.get("drawn_objects") if isinstance(existing, dict) else None
         if not isinstance(objects, list) or df.empty:

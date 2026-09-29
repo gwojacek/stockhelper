@@ -6458,14 +6458,26 @@ def _find_falling_wedge_setup(df: pd.DataFrame) -> WedgeScanResult | None:
                 # five candles, this candidate was already broken and another
                 # anchor set must be found instead.
                 for i in range(min(high_abs, uh2), end + 1):
-                    if closes[i] > _auto_wedge_line_value(i, upper_a, upper_b) + close_eps:
+                    upper_line_value = _auto_wedge_line_value(i, upper_a, upper_b)
+                    old_upper_wick_break = (
+                        i > max(upper_anchor_indices)
+                        and i < end - 5
+                        and highs[i] > upper_line_value + min(tol, _post_anchor_touch_tolerance(upper_line_value))
+                    )
+                    if old_upper_wick_break or closes[i] > upper_line_value + close_eps:
                         if i < end - 5:
                             invalid = True
                             break
                 if invalid:
                     continue
                 for i in range(min(lh1, lh2), end + 1):
-                    if closes[i] < _auto_wedge_line_value(i, lower_a, lower_b) - close_eps:
+                    lower_line_value = _auto_wedge_line_value(i, lower_a, lower_b)
+                    old_lower_wick_break = (
+                        i > max(lower_anchor_indices)
+                        and i < end - 5
+                        and lows[i] < lower_line_value - min(tol, _post_anchor_touch_tolerance(lower_line_value))
+                    )
+                    if old_lower_wick_break or closes[i] < lower_line_value - close_eps:
                         if i < end - 5:
                             invalid = True
                             break
