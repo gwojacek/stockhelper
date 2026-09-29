@@ -191,6 +191,9 @@ def test_broker_fx_rate_uses_current_market_rate_plus_round_trip_one_percent():
     assert "market_conversion_rate * (1.0 + fx_markup_pct)" in source
     assert "total_transaction_fee_pct = broker_commission_pct" in source
     assert "FX conversion 1% (2 × 0.5%)" in source
+    assert "Effective broker rate = current market rate × 1.01" in source
+    assert "0.5% buy + 0.5% sell" in source
+    assert '"market_conversion_rate": round(market_conversion_rate, 6)' in source
 
 
 def test_quick_chart_group_has_market_and_direction_filters():
