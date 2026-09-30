@@ -732,13 +732,17 @@ class LightweightChartLevelSelectorUI:
     .debug-data-section table {{ width:100% !important; min-width:680px !important; max-width:none !important; }}
     #calc-summary {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(108px,1fr)); align-items:stretch; gap:8px; width:100%; min-width:0; padding:1px 2px 4px; }}
     .calc-chip {{ box-sizing:border-box; min-width:0; min-height:64px; display:grid; grid-template-columns:24px minmax(0,1fr); gap:7px; align-items:center; padding:8px 10px; border:1px solid #244766; border-radius:9px; background:linear-gradient(145deg,rgba(14,36,62,.94),rgba(7,24,44,.96)); box-shadow:inset 0 1px 0 rgba(148,163,184,.08); }}
+    .calc-core-chip {{ grid-column:span 4; min-width:430px; display:grid; grid-template-columns:repeat(4,minmax(92px,1fr)); padding:0; gap:0; }}
+    .calc-core-segment {{ min-width:0; display:grid; grid-template-columns:24px minmax(0,1fr); gap:7px; align-items:center; padding:8px 10px; }} .calc-core-segment + .calc-core-segment {{ border-left:1px solid #31536f; }}
+    .calc-core-segment.positive .calc-chip-icon {{ color:#4ade80; }} .calc-core-segment.danger .calc-chip-icon {{ color:#fb7185; }}
     .calc-chip-icon {{ display:grid; place-items:center; width:24px; height:28px; color:#60a5fa; font-size:20px; font-style:normal; }}
     .calc-chip-copy {{ position:relative; min-width:0; display:grid; grid-template-rows:28px 18px; align-items:center; }} .calc-chip-label {{ display:flex; align-items:center; min-width:0; height:28px; color:#8fb4d4; font-size:11px; line-height:1.12; }} .calc-chip.has-state .calc-chip-label {{ padding-right:32px; }} .calc-chip-value {{ display:block; min-width:0; overflow:hidden; color:#eef6ff; font-size:13px; font-weight:900; line-height:18px; white-space:nowrap; text-overflow:ellipsis; }}
     .calc-chip-max-capital-to-engage-1-avg10d .calc-chip-label {{ font-size:10px; }} .calc-chip-projected-profit .calc-chip-value {{ font-size:12px; }}
     .calc-chip.positive .calc-chip-icon {{ color:#4ade80; }} .calc-chip.danger .calc-chip-icon {{ color:#fb7185; }} .calc-chip.fee .calc-chip-icon {{ color:#c084fc; }}
     .calc-chip-state {{ position:absolute; right:0; top:0; display:inline-block; padding:1px 5px; border:1px solid #52677f; border-radius:4px; color:#94a3b8; font-size:10px; font-style:normal; }} .calc-chip-state.on {{ border-color:#22c55e; background:rgba(21,128,61,.24); color:#86efac; }}
     .calc-summary-error {{ color:#fecaca; font-weight:800; }}
-    @media(max-width:1100px) {{ .calc-toolbar {{ grid-template-columns:1fr auto; }} #calc-summary {{ grid-column:1/-1; grid-row:2; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); }} }}
+    @media(max-width:1100px) {{ .calc-toolbar {{ grid-template-columns:1fr auto; }} #calc-summary {{ grid-column:1/-1; grid-row:2; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); }} .calc-core-chip {{ grid-column:1/-1; min-width:0; }} }}
+    @media(max-width:620px) {{ .calc-core-chip {{ grid-template-columns:repeat(2,minmax(120px,1fr)); }} .calc-core-segment:nth-child(3) {{ border-left:0; border-top:1px solid #31536f; }} .calc-core-segment:nth-child(4) {{ border-top:1px solid #31536f; }} }}
     #calc-warnings {{ margin-top:6px; color:#facc15; font-size:12px; }}
     #wedge-debug-panel {{ display:none; margin-top:10px; padding:10px; border:1px solid #334155; border-radius:10px; background:#0f172a; color:#dbeafe; font-size:12px; line-height:1.35; max-height:42vh; overflow:auto; white-space:pre-wrap; }}
     #wedge-debug-panel.open {{ display:block; }}
@@ -4669,6 +4673,10 @@ class LightweightChartLevelSelectorUI:
     const stateHtml = state == null ? '' : `<em class="calc-chip-state ${{state ? 'on' : ''}}">${{state ? 'ON' : 'OFF'}}</em>`;
     return `<span class="calc-chip calc-chip-${{kind}} ${{tone}} ${{state == null ? '' : 'has-state'}}"${{title ? ` title="${{title}}"` : ''}}><i class="calc-chip-icon">${{icon}}</i><span class="calc-chip-copy"><small class="calc-chip-label">${{label}}${{stateHtml}}</small><strong class="calc-chip-value">${{value || '&nbsp;'}}</strong></span></span>`;
   }}
+  function calculationCoreChip(instrument, position, entry, stopLoss) {{
+    const segment = (icon, label, value, tone='') => `<span class="calc-core-segment ${{tone}}"><i class="calc-chip-icon">${{icon}}</i><span class="calc-chip-copy"><small class="calc-chip-label">${{label}}</small><strong class="calc-chip-value">${{value}}</strong></span></span>`;
+    return `<span class="calc-chip calc-core-chip">${{segment('▥','Instrument',instrument)}}${{segment(position === 'LONG' ? '↑' : '↓','Position',position,position === 'LONG' ? 'positive' : 'danger')}}${{segment('◎','Entry',entry,'positive')}}${{segment('⬟','Stop loss',stopLoss,'danger')}}</span>`;
+  }}
   function renderCalculation(data) {{
     const drawer = $('calc-drawer'), summary = $('calc-summary'), table = $('calc-table'), warnings = $('calc-warnings');
     const wasOpen = drawer.classList.contains('open');
@@ -4688,10 +4696,7 @@ class LightweightChartLevelSelectorUI:
     const b = data.basics || {{}};
     const chips = [];
     const position = (data.position_type || $('position-type').value || 'long').toUpperCase();
-    chips.push(calculationChip('▥', 'Instrument', data.instrument_type || P.instrumentType));
-    chips.push(calculationChip(position === 'LONG' ? '↑' : '↓', 'Position', position, position === 'LONG' ? 'positive' : 'danger'));
-    if (Number.isFinite(Number(b.entry))) chips.push(calculationChip('◎', 'Entry', fmt(Number(b.entry)), 'positive'));
-    if (Number.isFinite(Number(b.stop_loss))) chips.push(calculationChip('⬟', 'Stop loss', fmt(Number(b.stop_loss)), 'danger'));
+    chips.push(calculationCoreChip(data.instrument_type || P.instrumentType, position, Number.isFinite(Number(b.entry)) ? fmt(Number(b.entry)) : '--', Number.isFinite(Number(b.stop_loss)) ? fmt(Number(b.stop_loss)) : '--'));
     if (b.instrument_currency && b.instrument_currency !== currency) {{
       const effectiveRate = `${{numText(b.instrument_to_calculation_rate, 4)}} ${{currency}}`;
       const rateTitle = data.fx_conversion_fee_enabled ? `${{numText(b.market_conversion_rate, 4)}} market × 1.01 (0.5% buy + 0.5% sell) = ${{effectiveRate}}` : `Current market rate: ${{effectiveRate}}`;

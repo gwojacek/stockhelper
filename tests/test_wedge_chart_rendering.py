@@ -481,6 +481,10 @@ def test_position_calculation_summary_uses_colored_semantic_cards():
     assert "min-height:64px" in source
     assert "white-space:nowrap; text-overflow:ellipsis" in source
     assert ".calc-chip-projected-profit .calc-chip-value {{ font-size:12px; }}" in source
+    assert ".calc-core-chip {{ grid-column:span 4" in source
+    assert ".calc-core-segment + .calc-core-segment {{ border-left:1px solid" in source
+    assert "function calculationCoreChip(instrument, position, entry, stopLoss)" in source
+    assert "chips.push(calculationCoreChip(data.instrument_type || P.instrumentType" in source
 
 
 def test_fx_toggle_recalculation_keeps_selected_chart_levels_and_latest_request():
