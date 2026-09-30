@@ -43,7 +43,40 @@ def test_manual_wedge_anchor_uses_real_candle_anchors_not_future_display_extensi
     )
 
 
-def test_saved_drawing_kinds_recognizes_manual_scanner_overrides(tmp_path, monkeypatch):
+def test_legacy_auto_wedge_projection_is_not_a_manual_anchor_pair():
+    obj = {
+        "id": "auto-wedge-upper",
+        "type": "wedge",
+        "group_id": "auto-wedge",
+        "label": "Falling wedge upper",
+        "x0": "2026-02-27",
+        "y0": 61.65,
+        "x1": "2026-10-14",
+        "y1": 48.37,
+    }
+
+    assert scanner._manual_wedge_anchor(obj) is None
+
+
+def test_explicit_save_marker_cannot_promote_legacy_scanner_projection(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    objects = [
+        {"id": "auto-wedge-upper", "type": "wedge", "group_id": "auto-wedge", "label": "Falling wedge upper", "x0": "2026-02-27", "y0": 61.65, "x1": "2026-10-14", "y1": 48.37},
+        {"id": "auto-wedge-lower", "type": "wedge", "group_id": "auto-wedge", "label": "Falling wedge lower", "x0": "2026-07-14", "y0": 46.79, "x1": "2026-10-14", "y1": 48.86},
+    ]
+    (sessions / "ENT.json").write_text(json.dumps({
+        "__saved_wedge_by_user__": True,
+        "drawn_objects": objects,
+    }), encoding="utf-8")
+    df = pd.read_csv(DATA_DIR / "ENT_WA.csv")
+
+    assert scanner._saved_drawing_kinds_for_ticker("ENT.WA") == {"wedge"}
+    assert scanner._find_manual_unbroken_wedge_setup(df, "ENT.WA") is None
+
+
+def test_unmarked_legacy_wedge_preview_does_not_override_new_scanner_result(tmp_path, monkeypatch):
     monkeypatch.setattr(scanner, "STATE_DATA_DIR", tmp_path)
     sessions = tmp_path / "sessions"
     sessions.mkdir()
@@ -54,7 +87,7 @@ def test_saved_drawing_kinds_recognizes_manual_scanner_overrides(tmp_path, monke
         ]
     }), encoding="utf-8")
 
-    assert scanner._saved_drawing_kinds_for_ticker("KLIN.WA") == {"wedge", "fibo"}
+    assert scanner._saved_drawing_kinds_for_ticker("KLIN.WA") == {"fibo"}
 
 
 def test_wedge_only_save_is_available_to_wedge_scanner_without_saving_chart(tmp_path, monkeypatch):
@@ -655,6 +688,31 @@ def test_crj_wa_prefers_sloping_structural_boundaries_over_nested_flat_shelf():
     assert setup.lower_touches == 3
     assert setup.breakout_date == "2026-09-11"
     assert setup.breakout_direction == "short"
+
+
+def test_ent_wa_uses_major_upper_rebound_and_latest_deeper_support_anchor():
+    df = pd.read_csv(DATA_DIR / "ENT_WA.csv")
+    latest_rows = pd.read_csv(StringIO(
+        "Date,Open,High,Low,Close,Volume\n"
+        "2026-09-23,50.00,50.70,49.85,50.00,7412\n"
+        "2026-09-24,50.30,50.30,49.30,49.35,11556\n"
+        "2026-09-25,49.40,49.45,48.60,48.65,8234\n"
+        "2026-09-28,49.05,49.30,48.50,49.10,8577\n"
+        "2026-09-29,48.60,50.10,48.60,49.35,1541\n"
+    ))
+    df = pd.concat([df, latest_rows], ignore_index=True).drop_duplicates("Date", keep="last")
+
+    setup = scanner._find_falling_wedge_setup(df)
+
+    assert setup is not None
+    assert setup.upper_start_date == "2026-01-23"
+    assert setup.upper_start_price == pytest.approx(64.0406)
+    assert setup.upper_end_date == "2026-08-10"
+    assert setup.upper_end_price == pytest.approx(55.1514)
+    assert setup.lower_start_date == "2026-07-14"
+    assert setup.lower_end_date == "2026-09-17"
+    assert setup.breakout_date == "-"
+    assert setup.breakout_direction == "-"
 
 
 def test_stale_stock_warning_compares_stock_dates_and_uses_three_day_cutoff(tmp_path, monkeypatch):

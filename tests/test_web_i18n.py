@@ -245,6 +245,11 @@ def test_instrument_card_toggle_is_global_and_other_card_toggles_are_local():
     assert "rememberSideCardCollapsed" in chart_source
     assert "persistSideCardStates" in chart_source
     assert "fetch('/sidebar-card-state'" in chart_source
+    assert "document.querySelectorAll('.collapsible-side-card').forEach(card=>" in chart_source
+    assert "if(!card.classList.contains('collapsed'))return;" in chart_source
+    assert "event.target.closest('button,a,input,select,textarea,h2,h4,.identity-sub')" in chart_source
+    assert "setSideCardCollapsed(card.id,false);" in chart_source
+    assert ".collapsible-side-card.collapsed {{ cursor:pointer; }}" in chart_source
     assert '@app.route("/sidebar-card-state", methods=["GET", "POST"])' in chart_source
     assert '<section class="side-card instrument-switcher-card">' in chart_source
     assert POLISH_TRANSLATIONS["Collapse section"] == "Zwiń sekcję"
@@ -411,3 +416,21 @@ def test_favorite_clear_button_uses_neutral_compact_button_styling():
     html = language_controls_html()
     assert ".favorite-clear-btn{margin-left:8px!important;min-width:28px" in html
     assert "background:rgba(120,53,15,.32)" not in html
+
+
+def test_wedge_diagnostics_keep_explicit_scanner_anchors():
+    chart_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert "const anchorsEstablishedAt = explicitAnchorIndices.length" in chart_source
+    assert "if (breakoutClose && idx > anchorsEstablishedAt) break;" in chart_source
+    assert "const merged = points.filter(pt => !explicitTimes.has(pt.time)).concat(fallbackAnchors);" in chart_source
+
+
+def test_burnt_scanner_wedge_is_reanchored_on_chart_load():
+    chart_source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert "function scannerWedgeNeedsReanchor()" in chart_source
+    assert "idx < rows.length - 5" in chart_source
+    assert "if (wedgeOnlySavedForScanner || !scannerWedgeNeedsReanchor()) return false;" in chart_source
+    assert "const candidate = findAlternativeWedgeCandidate('both');" in chart_source
+    assert "scannerWedgePreloaded && reanchorInvalidScannerWedge()" in chart_source

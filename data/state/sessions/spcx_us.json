@@ -1,0 +1,96 @@
+{
+  "apply_currency_conversion_fee": true,
+  "currency_conversion_fee_pct": 0.01,
+  "__currency_fee_eligible__": true,
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Kliny",
+  "drawn_objects": [
+    {
+      "id": "auto-wedge-upper",
+      "type": "wedge",
+      "label": "Falling wedge upper",
+      "x": [
+        "2026-06-16",
+        "2026-11-06"
+      ],
+      "y": [
+        225.64,
+        122.61
+      ],
+      "x0": "2026-06-16",
+      "x1": "2026-11-04",
+      "y0": 225.64,
+      "y1": 108.23278,
+      "anchor_x": [
+        "2026-06-16",
+        "2026-11-06"
+      ],
+      "anchor_y": [
+        225.64,
+        122.61
+      ],
+      "price": 108.23278,
+      "color": "#dc2626",
+      "group_id": "auto-wedge",
+      "free_extension": true
+    },
+    {
+      "id": "auto-wedge-lower",
+      "type": "wedge",
+      "label": "Falling wedge lower",
+      "x": [
+        "2026-08-06",
+        "2026-11-05"
+      ],
+      "y": [
+        105.11,
+        192.95
+      ],
+      "x0": "2026-08-26",
+      "x1": "2026-11-04",
+      "y0": 135.10001,
+      "y1": 164.38689,
+      "anchor_x": [
+        "2026-08-06",
+        "2026-11-05"
+      ],
+      "anchor_y": [
+        105.11,
+        192.95
+      ],
+      "price": 164.38689,
+      "color": "#2563eb",
+      "group_id": "auto-wedge",
+      "free_extension": true
+    }
+  ],
+  "__saved_wedge_by_user__": true,
+  "high": 225.64,
+  "__wedge_auto_high__": true,
+  "low": 105.11,
+  "__wedge_auto_low__": true,
+  "__half_points__": [],
+  "capital": 292000,
+  "calculation_currency": "PLN",
+  "__saved_fibo_by_user__": false,
+  "position_type": "long",
+  "lot_cost": 0,
+  "pip_value": 0,
+  "spread_multiplier": 0,
+  "spread": 0,
+  "spread_pips": null,
+  "level_points": {
+    "high": {
+      "price": 225.64,
+      "plot_price": 225.64,
+      "date": "2026-06-16",
+      "auto_wedge": true
+    },
+    "low": {
+      "price": 105.11,
+      "plot_price": 105.11,
+      "date": "2026-08-06",
+      "auto_wedge": true
+    }
+  }
+}

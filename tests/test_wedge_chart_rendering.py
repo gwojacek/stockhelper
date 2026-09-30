@@ -13,6 +13,14 @@ SCANNER_SOURCE = Path(__file__).resolve().parents[1] / "scanner_search.py"
 LEVEL_SELECTOR_SOURCE = Path(__file__).resolve().parents[1] / "chart_program" / "level_selector.py"
 
 
+def test_fresh_scanner_wedge_replaces_unmarked_legacy_preview():
+    selector_source = LEVEL_SELECTOR_SOURCE.read_text(encoding="utf-8")
+
+    assert 'existing.get("__saved_wedge_by_user__") is not True' in selector_source
+    assert "def _legacy_scanner_projection(obj) -> bool:" in selector_source
+    assert "if _legacy_scanner_projection(upper) or _legacy_scanner_projection(lower):" in selector_source
+
+
 def test_lightweight_fibonacci_drawings_include_23_6_for_scanner_and_manual_groups():
     source = UI_SOURCE.read_text(encoding="utf-8")
     selector_source = LEVEL_SELECTOR_SOURCE.read_text(encoding="utf-8")
@@ -433,6 +441,79 @@ def test_chart_and_drawer_have_a_persisted_drag_splitter():
     assert "border:0; background:#071426; color:#94a3b8" in splitter_css
     assert "#ea580c" not in splitter_css
     assert "#f97316" not in splitter_css
+
+
+def test_position_drawer_does_not_grow_after_repeated_calculations():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "const wasOpen = drawer.classList.contains('open');" in source
+    assert "if (!wasOpen && preferredDrawerHeight <= 0) setDrawerHeight(340);" in source
+    assert "drawer.getBoundingClientRect().height + 10" not in source
+
+
+def test_position_calculation_summary_uses_colored_semantic_cards():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert ".calc-chip {{" in source
+    assert ".calc-chip.positive" in source
+    assert ".calc-chip.danger" in source
+    assert "function calculationChip(icon, label, value, tone='', state=null, title='')" in source
+    assert "Position size (${{headlineRow.risk_label}} risk)" not in source
+    assert "Broker commission ${{numText(data.broker_commission_pct ?? 0.2, 2)}}%" in source
+    assert "calc-chip-state ${{state ? 'on' : ''}}" in source
+    assert ".calc-chip.positive .calc-chip-icon" in source
+    assert ".calc-chip.positive .calc-chip-value" not in source
+    assert "data.broker_commission_enabled ? 'Included' : 'Not included'" not in source
+    assert "const effectiveRate = `${{numText(b.instrument_to_calculation_rate, 4)}} ${{currency}}`" in source
+    assert "grid-template-columns:repeat(auto-fit,minmax(108px,1fr))" in source
+    assert "Max capital to engage (1% Avg10d)" in source
+    assert "FX conversion ${{numText(data.fx_conversion_fee_pct ?? 1, 1)}}% (2 × 0.5%)" in source
+    assert "Additional Z/R" in source
+    assert "const wedgeCalculation = drawnObjects.some(isWedgeLineObject)" in source
+    assert "wedgeCalculation && data.take_profit != null" in source
+    assert "wedgeCalculation && data.risk_reward != null" in source
+    assert "wedgeCalculation && data.profit != null" in source
+    assert "const userMarkedZr = !!levelPoints.check_zr_value_fibo_or_elevation" in source
+    assert "userMarkedZr && data.zr_ratio != null" in source
+    assert "position:absolute; right:0; top:0" in source
+    assert "${{value || '&nbsp;'}}" in source
+    assert "grid-template-rows:28px 18px" in source
+    assert "min-height:64px" in source
+    assert "white-space:nowrap; text-overflow:ellipsis" in source
+    assert ".calc-chip-projected-profit .calc-chip-value {{ font-size:12px; }}" in source
+    assert ".calc-core-chip {{ grid-column:span 4" in source
+    assert ".calc-core-segment + .calc-core-segment {{ border-left:1px solid" in source
+    assert "function calculationCoreChip(instrument, position, entry, stopLoss)" in source
+    assert "chips.push(calculationCoreChip(data.instrument_type || P.instrumentType" in source
+
+
+def test_fx_toggle_recalculation_keeps_selected_chart_levels_and_latest_request():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "const selectedLevelValue = field =>" in source
+    assert "entry:selectedLevelValue('entry')" in source
+    assert "stop_loss:selectedLevelValue('stop_loss')" in source
+    assert "const requestId = ++calculationRequestId" in source
+    assert "if (requestId !== calculationRequestId) return data;" in source
+
+
+def test_level_legend_is_updated_when_a_chart_value_changes():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+    add_legend = source[source.index("const addLegend"):source.index("const resetLegend")]
+
+    assert "const existingItem = [...legend.children].find(el => el.dataset.key === legendKey);" in add_legend
+    assert "if (text) text.textContent = label;" in add_legend
+    assert "addLegend(`${{labels[field]}}: ${{fmt(pt.price)}}`" in source
+
+
+def test_broker_commission_control_defaults_off_and_is_sent_to_calculator():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert 'id="broker-fee-toggle"' in source
+    assert 'id="broker-fee-pct" type="number" min="0" step="0.01" value="0.2"' in source
+    assert "levels.apply_broker_commission = !levels.apply_broker_commission" in source
+    assert "total_transaction_fee_pct = conversion_fee_pct + broker_commission_pct" in source
+    assert '"broker_commission_enabled": bool(levels.get("apply_broker_commission"))' in source
 
 
 def test_save_chart_and_png_buttons_have_identical_dimensions():

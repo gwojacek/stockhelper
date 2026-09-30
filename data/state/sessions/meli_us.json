@@ -2,7 +2,7 @@
   "apply_currency_conversion_fee": true,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": true,
-  "__show_ichimoku__": true,
+  "__show_ichimoku__": false,
   "__journal_source_technique__": "Fibo",
   "drawn_objects": [
     {
@@ -10,7 +10,7 @@
       "type": "fib",
       "label": "FIB 0% (2066.0)",
       "x0": "2026-09-03",
-      "x1": "2034-08-10",
+      "x1": "2034-08-12",
       "y0": 2066.0,
       "y1": 2066.0,
       "price": 2066.0,
@@ -23,7 +23,7 @@
       "type": "fib",
       "label": "FIB 23.6% (1931.244)",
       "x0": "2026-08-10",
-      "x1": "2034-08-10",
+      "x1": "2034-08-12",
       "y0": 1931.244,
       "y1": 1931.244,
       "price": 1931.244,
@@ -36,7 +36,7 @@
       "type": "fib",
       "label": "FIB 38.2% (1847.878)",
       "x0": "2026-07-23",
-      "x1": "2034-08-10",
+      "x1": "2034-08-12",
       "y0": 1847.878,
       "y1": 1847.878,
       "price": 1847.878,
@@ -49,7 +49,7 @@
       "type": "fib",
       "label": "FIB 50% (1780.5)",
       "x0": "2026-07-10",
-      "x1": "2034-08-10",
+      "x1": "2034-08-12",
       "y0": 1780.5,
       "y1": 1780.5,
       "price": 1780.5,
@@ -62,7 +62,7 @@
       "type": "fib",
       "label": "FIB 61.8% (1713.122)",
       "x0": "2026-06-26",
-      "x1": "2034-08-10",
+      "x1": "2034-08-12",
       "y0": 1713.122,
       "y1": 1713.122,
       "price": 1713.122,
@@ -75,7 +75,7 @@
       "type": "fib",
       "label": "FIB 100% (1495.0)",
       "x0": "2026-05-13",
-      "x1": "2034-08-10",
+      "x1": "2034-08-12",
       "y0": 1495.0,
       "y1": 1495.0,
       "price": 1495.0,
@@ -95,11 +95,5 @@
       "group_id": "auto-fibo"
     }
   ],
-  "__saved_fibo_by_user__": false,
-  "__scanner_breakout_date__": "2026-07-01",
-  "__scanner_breakout_direction__": "long",
-  "__scanner_retest_count__": "1",
-  "__scanner_latest_retest_date__": "2026-09-21",
-  "__scanner_latest_retest_pattern__": "bullish_piercing_line",
-  "__scanner_previous_respect_months__": "4.9"
+  "__saved_fibo_by_user__": false
 }

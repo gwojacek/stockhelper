@@ -2032,6 +2032,13 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         kijun = info["kijun"]
         return ("above" in side and kijun == "over") or ("below" in side and kijun == "under")
 
+    def _crossed_kijun_watch(item: tuple[ScannerRow, dict[str, str]]) -> bool:
+        """Keep price/Kijun disagreement in the watch column at every age."""
+        _row, info = item
+        side = info["cloud_side"]
+        kijun = info["kijun"]
+        return ("above" in side and kijun == "under") or ("below" in side and kijun == "over")
+
     def bucket(item: tuple[ScannerRow, dict[str, str]]) -> str:
         row, info = item
         if _is_early_breakout_waiting(row):
@@ -2052,6 +2059,12 @@ def _write_trojpolowki_ichimoku(rows: list[ScannerRow], out_dir: Path, timestamp
         # or below/under continuation, move it back from watch to strong.
         if _current_continuation(item):
             return "strong"
+        # A mature trend on the opposite side of Kijun is precisely the watch
+        # setup represented by column two.  Test this before the generic 4m+
+        # continuation fallback; otherwise every such WIG row is swallowed by
+        # column one and the watch column can be empty (for example APR).
+        if _crossed_kijun_watch(item):
+            return "watch"
         if row.category == "position" and months < 4.0:
             return "skip"
         if months >= 4.0 and any(token in info["cloud_side"] for token in ("above", "below")) and info["kijun"] != "touched":
@@ -3768,7 +3781,7 @@ def _run_allsearch_combo(scopes: list[str], force_cache_only: bool = False, forc
     # Stooq starts with the normal connection and switches to the local Tor
     # SOCKS proxy only when the history table is missing.
     os.environ.setdefault("STOCKHELPER_STOOQ_DIRECT_FIRST", "1")
-    os.environ.setdefault("STOCKHELPER_COMMODITIES_WORKERS", "6")
+    os.environ.setdefault("STOCKHELPER_COMMODITIES_WORKERS", "3")
     print("[allsearch] Stooq connection mode=direct-first, Tor SOCKS fallback=socks5://127.0.0.1:9050", flush=True)
     report_dir = ALL_REPORT_DIR / "allsearch"
     report_dir.mkdir(parents=True, exist_ok=True)

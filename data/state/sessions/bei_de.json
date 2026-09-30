@@ -2,9 +2,72 @@
   "apply_currency_conversion_fee": true,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": true,
-  "__show_ichimoku__": true,
-  "drawn_objects": [],
-  "__journal_source_technique__": "Ichimoku",
+  "__show_ichimoku__": false,
+  "drawn_objects": [
+    {
+      "id": "auto-wedge-upper",
+      "type": "wedge",
+      "label": "Falling wedge upper",
+      "x": [
+        "2026-02-24",
+        "2026-08-28",
+        "2026-10-16"
+      ],
+      "y": [
+        110.15,
+        81.4,
+        73.65962
+      ],
+      "x0": "2026-02-24",
+      "x1": "2026-10-16",
+      "y0": 110.15,
+      "y1": 73.65962,
+      "anchor_x": [
+        "2026-02-24",
+        "2026-08-28"
+      ],
+      "anchor_y": [
+        110.15,
+        81.4
+      ],
+      "price": 73.65962,
+      "color": "#dc2626",
+      "group_id": "auto-wedge",
+      "free_extension": false
+    },
+    {
+      "id": "auto-wedge-lower",
+      "type": "wedge",
+      "label": "Falling wedge lower",
+      "x": [
+        "2026-06-04",
+        "2026-09-10",
+        "2026-10-16"
+      ],
+      "y": [
+        67.08,
+        73.06,
+        75.28114
+      ],
+      "x0": "2026-06-04",
+      "x1": "2026-10-16",
+      "y0": 67.08,
+      "y1": 75.28114,
+      "anchor_x": [
+        "2026-06-04",
+        "2026-09-10"
+      ],
+      "anchor_y": [
+        67.08,
+        73.06
+      ],
+      "price": 75.28114,
+      "color": "#2563eb",
+      "group_id": "auto-wedge",
+      "free_extension": false
+    }
+  ],
+  "__journal_source_technique__": "Kliny",
   "high": 110.15,
   "__wedge_auto_high__": true,
   "low": 67.08,
@@ -32,11 +95,6 @@
       "auto_wedge": true
     }
   },
-  "__scanner_breakout_date__": "2026-06-30",
-  "__scanner_breakout_direction__": "long",
-  "__scanner_retest_count__": "1",
-  "__scanner_latest_retest_date__": "2026-08-18",
-  "__scanner_latest_retest_pattern__": "bullish_piercing_line",
-  "__scanner_previous_respect_months__": "3.9",
-  "__saved_fibo_by_user__": false
+  "__saved_fibo_by_user__": false,
+  "__saved_wedge_by_user__": false
 }

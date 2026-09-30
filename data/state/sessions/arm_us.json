@@ -2,7 +2,7 @@
   "apply_currency_conversion_fee": true,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": true,
-  "__show_ichimoku__": false,
+  "__show_ichimoku__": true,
   "__journal_source_technique__": "Fibo",
   "drawn_objects": [
     {
@@ -10,10 +10,23 @@
       "type": "fib",
       "label": "FIB 0% (219.39)",
       "x0": "2026-08-03",
-      "x1": "2034-08-07",
+      "x1": "2034-08-13",
       "y0": 219.39,
       "y1": 219.39,
       "price": 219.39,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "short"
+    },
+    {
+      "id": "auto-fibo-236",
+      "type": "fib",
+      "label": "FIB 23.6% (274.45116)",
+      "x0": "2026-07-23",
+      "x1": "2034-08-13",
+      "y0": 274.45116,
+      "y1": 274.45116,
+      "price": 274.45116,
       "color": "#64748b",
       "group_id": "auto-fibo",
       "direction": "short"
@@ -23,7 +36,7 @@
       "type": "fib",
       "label": "FIB 38.2% (308.51442)",
       "x0": "2026-07-17",
-      "x1": "2034-08-07",
+      "x1": "2034-08-13",
       "y0": 308.51442,
       "y1": 308.51442,
       "price": 308.51442,
@@ -36,7 +49,7 @@
       "type": "fib",
       "label": "FIB 50% (336.04501)",
       "x0": "2026-07-13",
-      "x1": "2034-08-07",
+      "x1": "2034-08-13",
       "y0": 336.04501,
       "y1": 336.04501,
       "price": 336.04501,
@@ -49,7 +62,7 @@
       "type": "fib",
       "label": "FIB 61.8% (363.57559)",
       "x0": "2026-07-07",
-      "x1": "2034-08-07",
+      "x1": "2034-08-13",
       "y0": 363.57559,
       "y1": 363.57559,
       "price": 363.57559,
@@ -62,7 +75,7 @@
       "type": "fib",
       "label": "FIB 100% (452.70001)",
       "x0": "2026-06-18",
-      "x1": "2034-08-07",
+      "x1": "2034-08-13",
       "y0": 452.70001,
       "y1": 452.70001,
       "price": 452.70001,
@@ -82,5 +95,11 @@
       "group_id": "auto-fibo"
     }
   ],
-  "__saved_fibo_by_user__": false
+  "__saved_fibo_by_user__": false,
+  "__scanner_breakout_date__": "2026-07-15",
+  "__scanner_breakout_direction__": "short",
+  "__scanner_retest_count__": "2",
+  "__scanner_latest_retest_date__": "2026-09-23",
+  "__scanner_latest_retest_pattern__": "bearish_harami",
+  "__scanner_previous_respect_months__": "4.2"
 }

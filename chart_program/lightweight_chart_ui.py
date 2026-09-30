@@ -19,6 +19,7 @@ from core.calculator import calculate_position_size, calculate_stock_position
 from core.risk_manager import calculate_distance_ratio, calculate_take_profit
 from chart_program.config_writer import DEFAULT_RISK_LEVELS
 from utilities.web_i18n import language_controls_html
+from utilities.yahoo_finance import get_fx_to_pln_rate_yahoo
 from werkzeug.serving import WSGIRequestHandler, make_server
 
 SELECTION_SEQUENCE = [
@@ -38,6 +39,29 @@ LABELS = {
     "check_zr_value_fibo_or_elevation": "CHECK_ZR",
     "line_cross_value": "LINE_CROSS",
 }
+
+FX_TO_PLN_FALLBACK_RATES = {"PLN": 1.0, "USD": 3.92, "EUR": 4.25, "GBP": 5.05}
+BROKER_FX_ROUND_TRIP_MARKUP_PCT = 0.01
+
+
+def _current_fx_to_pln_rates() -> dict[str, float]:
+    """Use live Yahoo FX, then the newest local candle, then fixed fallbacks."""
+    rates = dict(FX_TO_PLN_FALLBACK_RATES)
+    forex_dir = Path(__file__).resolve().parents[1] / "data" / "csv" / "forex"
+    for currency in ("USD", "EUR", "GBP"):
+        try:
+            _pair, live_rate = get_fx_to_pln_rate_yahoo(currency)
+            if float(live_rate) > 0:
+                rates[currency] = float(live_rate)
+                continue
+        except Exception:
+            try:
+                closes = pd.to_numeric(pd.read_csv(forex_dir / f"{currency}PLN.csv")["Close"], errors="coerce").dropna()
+                if not closes.empty and float(closes.iloc[-1]) > 0:
+                    rates[currency] = float(closes.iloc[-1])
+            except (FileNotFoundError, KeyError, OSError, ValueError):
+                pass
+    return rates
 
 LINE_COLORS = {
     "gold": "#facc15",
@@ -560,6 +584,8 @@ class LightweightChartLevelSelectorUI:
     .instrument-card.collapsed .instrument-hero {{ margin-bottom:0; }}
     .collapsible-side-card.collapsed .side-card-body {{ display:none; }}
     .collapsible-side-card.collapsed .side-card-head {{ margin-bottom:0; }}
+    .collapsible-side-card.collapsed {{ cursor:pointer; }}
+    .collapsible-side-card.collapsed h2,.collapsible-side-card.collapsed h4,.collapsible-side-card.collapsed .identity-sub {{ cursor:text; }}
     .manual-card.collapsed {{ padding:11px; border-radius:16px; }}
     .manual-card.collapsed .side-card-head {{ padding-bottom:0; border-bottom:0; margin-bottom:0; }}
     .identity-row {{ display:flex; align-items:center; gap:7px; min-width:0; }}
@@ -658,11 +684,13 @@ class LightweightChartLevelSelectorUI:
     #setup-debug-btn {{ background:linear-gradient(135deg,rgba(88,28,135,.72),rgba(49,46,129,.80)) !important; border:1px solid #c084fc; box-shadow:0 14px 30px rgba(168,85,247,.18), inset 0 1px 0 rgba(255,255,255,.12); }}
     #journal-toggle-btn {{ background:linear-gradient(135deg,#9a3412,#f59e0b) !important; border:1px solid #fcd34d; box-shadow:0 14px 30px rgba(245,158,11,.20), inset 0 1px 0 rgba(255,255,255,.12); }}
     #journal-toggle-btn .btn-icon {{ background:rgba(254,243,199,.18); color:#fef3c7; }}
-    #currency-fee-toggle {{ min-height:46px !important;padding:9px 64px 9px 12px !important;font-size:14px !important;border-radius:14px !important;background:rgba(15,23,42,.58)!important;border:1px solid rgba(148,163,184,.25)!important;display:flex!important;align-items:center;justify-content:space-between;position:relative; }}
-    #currency-fee-toggle::after {{ content:''; position:absolute; right:12px; top:50%; transform:translateY(-50%); width:42px; height:22px; border-radius:999px; background:#1e293b; box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); }}
-    #currency-fee-toggle::before {{ content:''; position:absolute; right:31px; top:50%; transform:translateY(-50%); width:18px; height:18px; border-radius:50%; background:#cbd5e1; z-index:1; box-shadow:0 2px 8px rgba(0,0,0,.45); transition:right .18s ease, background .18s ease; }}
-    #currency-fee-toggle.active::after {{ background:linear-gradient(90deg,#2563eb,#60a5fa); box-shadow:0 0 18px rgba(96,165,250,.35); }}
-    #currency-fee-toggle.active::before {{ right:15px; background:#fff; }}
+    #currency-fee-toggle,#broker-fee-toggle {{ min-height:46px !important;padding:9px 64px 9px 12px !important;font-size:14px !important;border-radius:14px !important;background:rgba(15,23,42,.58)!important;border:1px solid rgba(148,163,184,.25)!important;display:flex!important;align-items:center;justify-content:space-between;position:relative; }}
+    #currency-fee-toggle::after,#broker-fee-toggle::after {{ content:''; position:absolute; right:12px; top:50%; transform:translateY(-50%); width:42px; height:22px; border-radius:999px; background:#1e293b; box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); }}
+    #currency-fee-toggle::before,#broker-fee-toggle::before {{ content:''; position:absolute; right:31px; top:50%; transform:translateY(-50%); width:18px; height:18px; border-radius:50%; background:#cbd5e1; z-index:1; box-shadow:0 2px 8px rgba(0,0,0,.45); transition:right .18s ease, background .18s ease; }}
+    #currency-fee-toggle.active::after,#broker-fee-toggle.active::after {{ background:linear-gradient(90deg,#2563eb,#60a5fa); box-shadow:0 0 18px rgba(96,165,250,.35); }}
+    #currency-fee-toggle.active::before,#broker-fee-toggle.active::before {{ right:15px; background:#fff; }}
+    .broker-fee-row {{ display:grid;grid-template-columns:1fr 82px;gap:8px;align-items:center;margin-top:8px; }}
+    #broker-fee-pct {{ min-width:0;text-align:center;padding:10px 6px; }}
     #result-box {{ margin-top:12px; padding:14px; border:1px solid rgba(34,197,94,.45); border-radius:16px; background:linear-gradient(135deg,rgba(6,78,59,.45),rgba(2,6,23,.65)); color:#d1fae5; font-weight:800; overflow-wrap:anywhere; }}
     #result-box:empty {{ display:none; }}
     #journal-panel {{ margin-top:12px;padding:14px;border:1px solid rgba(96,165,250,.35);border-radius:18px;background:linear-gradient(145deg, rgba(15,23,42,.98), rgba(2,6,23,.96));box-shadow:0 18px 55px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.06); }}
@@ -679,7 +707,7 @@ class LightweightChartLevelSelectorUI:
     #journal-notes {{ min-height:170px; resize:vertical; }}
     #journal-preview {{ display:none; white-space:pre-wrap;background:rgba(2,6,23,.76);border:1px solid #334155;border-radius:14px;padding:10px;margin-top:10px;color:#dbeafe;font-size:12px;max-height:170px;overflow:auto; }}
     #journal-panel.show-preview #journal-preview {{ display:block; }}
-    .manual-card.journal-open > .side-card-body > label,.manual-card.journal-open > .side-card-body > input,.manual-card.journal-open > .side-card-body > select,.manual-card.journal-open > .side-card-body > #calculation-currency-buttons,.manual-card.journal-open > .side-card-body > #currency-fee-toggle,.manual-card.journal-open > .side-card-body > #object-picker,.manual-card.journal-open > .side-card-body > #delete-object,.manual-card.journal-open > .side-card-body > #calculate-btn,.manual-card.journal-open > .side-card-body > .action-grid,.manual-card.journal-open > .side-card-body > #wedge-debug-panel {{ display:none !important; }}
+    .manual-card.journal-open > .side-card-body > label,.manual-card.journal-open > .side-card-body > input,.manual-card.journal-open > .side-card-body > select,.manual-card.journal-open > .side-card-body > #calculation-currency-buttons,.manual-card.journal-open > .side-card-body > #currency-fee-toggle,.manual-card.journal-open > .side-card-body > .broker-fee-row,.manual-card.journal-open > .side-card-body > #object-picker,.manual-card.journal-open > .side-card-body > #delete-object,.manual-card.journal-open > .side-card-body > #calculate-btn,.manual-card.journal-open > .side-card-body > .action-grid,.manual-card.journal-open > .side-card-body > #wedge-debug-panel {{ display:none !important; }}
     .manual-card.journal-open #journal-panel {{ margin-top:0; padding:16px; min-height:520px; }}
     #journal-close-panel {{ width:auto;margin-left:auto;padding:6px 10px;border-radius:999px;background:#1e293b;border:1px solid #475569;color:#dbeafe;font-size:12px; }}
     .fib-label-contrast {{ color: #f8fafc; text-shadow: 0 1px 2px rgba(0,0,0,.65); }}
@@ -687,23 +715,34 @@ class LightweightChartLevelSelectorUI:
     .main.calc-open #chart-wrap {{ height: calc(100vh - 210px - var(--calc-drawer-height, 340px)); min-height: 180px; cursor: grab; }}
     .main.calc-open #chart-wrap.dragging {{ cursor: grabbing; }}
     #calc-splitter {{ display:none; position:relative; z-index:90; height:22px; margin:0 10px; cursor:ns-resize; touch-action:none; }} #calc-splitter::before {{ content:''; display:block; position:absolute; left:0; right:0; top:10px; height:2px; border-radius:999px; background:#315b80; }} #calc-splitter::after {{ content:'↕'; display:grid; place-items:center; position:absolute; left:50%; top:1px; width:28px; height:20px; transform:translateX(-50%); border:0; background:#071426; color:#94a3b8; font:900 15px/1 sans-serif; }} #calc-splitter:hover::after,#calc-splitter.resizing::after {{ color:#e2e8f0; transform:translateX(-50%) scale(1.08); }} .main.calc-open #calc-splitter {{ display:block; }}
-    #calc-drawer {{ display:none; position:relative; margin-top:8px; max-height:46vh; overflow:auto; background:rgba(15,23,42,.97); border:1px solid #334155; border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.45); padding:10px 12px; }}
+    #calc-drawer {{ display:none; position:relative; margin-top:8px; max-height:46vh; overflow:auto; background:linear-gradient(145deg,rgba(5,16,35,.99),rgba(10,24,45,.98)); border:1px solid #285170; border-radius:14px; box-shadow:0 18px 50px rgba(0,0,0,.45),inset 0 1px 0 rgba(148,163,184,.08); padding:12px 14px; }}
     #calc-drawer.open {{ display:block; margin-top:-6px; }}
     .main.calc-open #calc-drawer {{ box-sizing:border-box; height:var(--calc-drawer-height,340px); max-height:none; }}
-    .calc-toolbar {{ display:grid; grid-template-columns:minmax(180px,1fr) minmax(240px,1fr) auto auto; align-items:center; gap:12px; margin:0 0 10px; }}
-    #calc-title {{ margin:0; font-size:18px; }}
-    #calc-close {{ justify-self:end; }}
-    #calc-table {{ max-width: 980px; margin: 0 auto; }}
-    #calc-drawer table {{ width:auto; min-width:760px; max-width:980px; border-collapse:collapse; font-size:13px; }}
-    #calc-drawer th, #calc-drawer td {{ border:1px solid #334155; padding:4px 7px; text-align:right; white-space:nowrap; }}
+    .calc-toolbar {{ display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:14px; margin:0 0 12px; }}
+    #calc-title {{ margin:0; color:#f8fafc; font-size:18px; white-space:nowrap; }}
+    #calc-close {{ justify-self:end; min-height:34px; padding:6px 12px; border-color:#315779; background:#0d2038; color:#dbeafe; }}
+    #calc-table {{ max-width: 1080px; margin: 0 auto; overflow-x:auto; border-radius:10px; }}
+    #calc-drawer table {{ width:100%; min-width:760px; max-width:1080px; border-collapse:separate; border-spacing:0; font-size:13px; }}
+    #calc-drawer th, #calc-drawer td {{ border-right:1px solid #29415f; border-bottom:1px solid #29415f; padding:6px 9px; text-align:right; white-space:nowrap; }}
     #calc-drawer th:first-child, #calc-drawer td:first-child {{ text-align:left; }}
-    #calc-drawer th {{ background:#1e293b; color:#bfdbfe; position:sticky; top:0; }}
+    #calc-drawer th {{ background:#162942; color:#93c5fd; position:sticky; top:0; }}
     #calc-table.debug-report {{ max-width:none; }} #calc-table.debug-report > table {{ width:100%; max-width:none; table-layout:fixed; }} #calc-table.debug-report > table th,#calc-table.debug-report > table td {{ min-height:34px; padding:9px 12px; vertical-align:middle; white-space:normal; }} #calc-table.debug-report > table th:first-child,#calc-table.debug-report > table td:first-child {{ width:16%; }} #calc-table.debug-report > table th:not(:first-child),#calc-table.debug-report > table td:not(:first-child) {{ border-left:3px solid #294f73; text-align:center; }}
     .calc-toolbar.debug-instrument {{ position:relative; padding:10px 12px; border:1px solid #29415f; border-radius:9px; background:#071426; }} .debug-report-identity {{ display:none; min-width:0; text-align:center; }} .debug-instrument .debug-report-identity {{ display:block; position:absolute; left:50%; top:50%; width:min(34vw,440px); transform:translate(-50%,-50%); }} .debug-report-identity strong {{ display:block; color:#f8fafc; font-size:15px; }} .debug-report-identity span {{ display:block; margin-top:2px; color:#93c5fd; font-size:12px; }}
     .debug-data-section {{ margin-top:14px; padding:12px; border:1px solid #29415f; border-radius:10px; background:#071426; }} .debug-data-section h4 {{ margin:0 0 8px; color:#c4b5fd; }}
     .debug-data-section table {{ width:100% !important; min-width:680px !important; max-width:none !important; }}
-    #calc-summary {{ display:flex; flex-wrap:wrap; justify-content:flex-end; gap:5px 12px; margin-left:auto; color:#cbd5e1; font-size:13px; }}
-    #calc-summary b {{ color:#f8fafc; }}
+    #calc-summary {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(108px,1fr)); align-items:stretch; gap:8px; width:100%; min-width:0; padding:1px 2px 4px; }}
+    .calc-chip {{ box-sizing:border-box; min-width:0; min-height:64px; display:grid; grid-template-columns:24px minmax(0,1fr); gap:7px; align-items:center; padding:8px 10px; border:1px solid #244766; border-radius:9px; background:linear-gradient(145deg,rgba(14,36,62,.94),rgba(7,24,44,.96)); box-shadow:inset 0 1px 0 rgba(148,163,184,.08); }}
+    .calc-core-chip {{ grid-column:span 4; min-width:430px; display:grid; grid-template-columns:repeat(4,minmax(92px,1fr)); padding:0; gap:0; }}
+    .calc-core-segment {{ min-width:0; display:grid; grid-template-columns:24px minmax(0,1fr); gap:7px; align-items:center; padding:8px 10px; }} .calc-core-segment + .calc-core-segment {{ border-left:1px solid #31536f; }}
+    .calc-core-segment.positive .calc-chip-icon {{ color:#4ade80; }} .calc-core-segment.danger .calc-chip-icon {{ color:#fb7185; }}
+    .calc-chip-icon {{ display:grid; place-items:center; width:24px; height:28px; color:#60a5fa; font-size:20px; font-style:normal; }}
+    .calc-chip-copy {{ position:relative; min-width:0; display:grid; grid-template-rows:28px 18px; align-items:center; }} .calc-chip-label {{ display:flex; align-items:center; min-width:0; height:28px; color:#8fb4d4; font-size:11px; line-height:1.12; }} .calc-chip.has-state .calc-chip-label {{ padding-right:32px; }} .calc-chip-value {{ display:block; min-width:0; overflow:hidden; color:#eef6ff; font-size:13px; font-weight:900; line-height:18px; white-space:nowrap; text-overflow:ellipsis; }}
+    .calc-chip-max-capital-to-engage-1-avg10d .calc-chip-label {{ font-size:10px; }} .calc-chip-projected-profit .calc-chip-value {{ font-size:12px; }}
+    .calc-chip.positive .calc-chip-icon {{ color:#4ade80; }} .calc-chip.danger .calc-chip-icon {{ color:#fb7185; }} .calc-chip.fee .calc-chip-icon {{ color:#c084fc; }}
+    .calc-chip-state {{ position:absolute; right:0; top:0; display:inline-block; padding:1px 5px; border:1px solid #52677f; border-radius:4px; color:#94a3b8; font-size:10px; font-style:normal; }} .calc-chip-state.on {{ border-color:#22c55e; background:rgba(21,128,61,.24); color:#86efac; }}
+    .calc-summary-error {{ color:#fecaca; font-weight:800; }}
+    @media(max-width:1100px) {{ .calc-toolbar {{ grid-template-columns:1fr auto; }} #calc-summary {{ grid-column:1/-1; grid-row:2; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); }} .calc-core-chip {{ grid-column:1/-1; min-width:0; }} }}
+    @media(max-width:620px) {{ .calc-core-chip {{ grid-template-columns:repeat(2,minmax(120px,1fr)); }} .calc-core-segment:nth-child(3) {{ border-left:0; border-top:1px solid #31536f; }} .calc-core-segment:nth-child(4) {{ border-top:1px solid #31536f; }} }}
     #calc-warnings {{ margin-top:6px; color:#facc15; font-size:12px; }}
     #wedge-debug-panel {{ display:none; margin-top:10px; padding:10px; border:1px solid #334155; border-radius:10px; background:#0f172a; color:#dbeafe; font-size:12px; line-height:1.35; max-height:42vh; overflow:auto; white-space:pre-wrap; }}
     #wedge-debug-panel.open {{ display:block; }}
@@ -791,6 +830,7 @@ class LightweightChartLevelSelectorUI:
         <label>Calculation currency</label><div id="calculation-currency-buttons"><button type="button" data-currency="PLN">PLN</button><button type="button" data-currency="USD">USD</button><button type="button" data-currency="EUR">EUR</button><button type="button" data-currency="GBP">GBP</button></div><input id="calculation-currency" type="hidden" value="PLN" />
         <div id="max-capital-info" style="display:none;margin-top:8px;padding:10px 12px;border:1px solid #334155;border-radius:10px;background:#0f172a;color:#cbd5e1;font-size:12px"></div>
         <button id="currency-fee-toggle" style="margin-top:8px;width:100%;display:none"></button>
+        <div class="broker-fee-row"><button id="broker-fee-toggle" type="button"></button><input id="broker-fee-pct" type="number" min="0" step="0.01" value="0.2" title="Broker commission percent charged on entry and exit" /></div>
         <label id="lot-cost-label">Lot cost</label><input id="lot-cost" type="number" />
         <label id="pip-value-label">Pip value</label><input id="pip-value" type="number" />
         <label id="spread-mult-label">Spread multiplier (spread = Multiplier * pip_value)</label><input id="spread-mult" type="number" />
@@ -825,6 +865,7 @@ class LightweightChartLevelSelectorUI:
   const seq = P.selectionSequence;
   const labels = P.labels;
   let levels = {{...(P.values || {{}})}};
+  let calculationRequestId = 0;
   let levelPoints = {{...(levels.level_points || {{}})}};
   const deepClone = (value) => JSON.parse(JSON.stringify(value));
   const isScannerDrawnObject = (obj) => !!obj && (obj.group_id === 'auto-wedge' || obj.group_id === 'auto-fibo' || obj.type === 'wedge' || obj.scanner === true || obj.source === 'scanner');
@@ -915,10 +956,19 @@ class LightweightChartLevelSelectorUI:
       }}
     }});
   }});
+  document.querySelectorAll('.collapsible-side-card').forEach(card=>{{
+    card.addEventListener('click',event=>{{
+      if(!card.classList.contains('collapsed'))return;
+      if(event.target.closest('button,a,input,select,textarea,h2,h4,.identity-sub'))return;
+      setSideCardCollapsed(card.id,false);
+      persistSideCardStates([card.id]);
+    }});
+  }});
 
   const chartInstrumentCurrency = () => {{
     const symbol=String(P.sourceTicker||P.symbol||'').toUpperCase();
-    if(symbol.endsWith('.US'))return 'USD'; if(symbol.endsWith('.DE'))return 'EUR';
+    if(symbol.endsWith('.US')||symbol.includes('USD'))return 'USD';
+    if(['.DE','.F','.FR','.NL','.ES','.IT'].some(suffix=>symbol.endsWith(suffix))||symbol.includes('EUR'))return 'EUR';
     if(symbol.endsWith('.L'))return 'GBP'; return 'PLN';
   }};
   const avg10Turnover = (() => {{
@@ -1039,7 +1089,14 @@ class LightweightChartLevelSelectorUI:
     if (!label) return;
     const legend = $('chart-legend');
     const legendKey = key || `${{label}}|${{color}}`;
-    if ([...legend.children].some(el => el.dataset.key === legendKey)) return;
+    const existingItem = [...legend.children].find(el => el.dataset.key === legendKey);
+    if (existingItem) {{
+      const text = existingItem.querySelector('b');
+      const swatch = existingItem.querySelector('i');
+      if (text) text.textContent = label;
+      if (swatch) swatch.style.background = color;
+      return;
+    }}
     const item = document.createElement('span');
     item.dataset.key = legendKey;
     item.classList.toggle('hidden', hiddenLegendKeys.has(legendKey));
@@ -1331,6 +1388,8 @@ class LightweightChartLevelSelectorUI:
     const idx0 = Number(e0?.idx);
     const idx1 = Number(e1?.idx);
     if (!Number.isFinite(idx0) || !Number.isFinite(idx1) || idx0 === idx1) return fallbackAnchors;
+    const explicitAnchorIndices = fallbackAnchors.map(pt => Number(pt.idx)).filter(Number.isFinite);
+    const anchorsEstablishedAt = explicitAnchorIndices.length ? Math.max(...explicitAnchorIndices) : Math.min(idx0, idx1);
     const touchCandidates = [];
     const start = Math.min(idx0, idx1);
     const end = realCandles.length - 1;
@@ -1349,7 +1408,11 @@ class LightweightChartLevelSelectorUI:
       const touchTolerance = Math.max(Math.abs(lineValue) * 0.00025, Math.abs(lineValue) < 1 ? 0.00025 : 0.0025);
       const close = Number(c.close);
       const breakoutClose = side === 'upper' ? close > lineValue + closeTolerance : close < lineValue - closeTolerance;
-      if (breakoutClose) break;
+      // A projected line can be crossed before its second scanner anchor is
+      // formed.  That older candle cannot be the breakout of a structure that
+      // did not exist yet, and must not hide the later explicit anchor from
+      // diagnostics or breakout validation.
+      if (breakoutClose && idx > anchorsEstablishedAt) break;
       // Preserve the scanner's touch definition: the relevant wick must reach
       // or pierce the trendline and the candle must close back inside.  Do not
       // count body-only intersections or candles that remain under/over the
@@ -1374,6 +1437,11 @@ class LightweightChartLevelSelectorUI:
       points.push(pt);
       lastIdx = pt.idx;
     }});
+    if (fallbackAnchors.length) {{
+      const explicitTimes = new Set(fallbackAnchors.map(pt => pt.time));
+      const merged = points.filter(pt => !explicitTimes.has(pt.time)).concat(fallbackAnchors);
+      return merged.sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0));
+    }}
     const firstAnchor = points.find(pt => pt.local_extreme) || points[0];
     const secondAnchor = firstAnchor ? (points.find(pt => pt !== firstAnchor && pt.idx - firstAnchor.idx > 1 && pt.local_extreme) || points.find(pt => pt !== firstAnchor && pt.idx - firstAnchor.idx > 1)) : null;
     [firstAnchor, secondAnchor].filter(Boolean).forEach(pt => {{ pt.anchor = true; pt.computed_anchor = true; }});
@@ -1889,27 +1957,23 @@ class LightweightChartLevelSelectorUI:
       const anchorDates = [boundary?.x0, boundary?.x1].filter(Boolean).map(x => String(x).slice(0,10));
       anchorDates.forEach(d => {{ if (!earliestAnchor || d < earliestAnchor) earliestAnchor = d; }});
       const value618 = Number(fib618?.price ?? fib618?.y0);
-      let touch = null;
-      if (Number.isFinite(value618)) {{
-        const since = anchorDates[0] || null;
-        touch = ohlc.find(row => (!since || String(row.time) >= since) && Number(row.low) <= value618 && Number(row.high) >= value618) || null;
-      }}
       const boundaryGeometry=debugGeometryValues(boundary);
       const anchorDatesLine = boundaryGeometry ? `${{String(boundaryGeometry.x0 || '').slice(0,10)}}->${{String(boundaryGeometry.x1 || '').slice(0,10)}}` : '-';
       const anchorValuesLine = boundaryGeometry ? `${{fmt(boundaryGeometry.y0)}}->${{fmt(boundaryGeometry.y1)}}` : '-';
       const scannerPatternDate = scannerMetaValue('__scanner_pattern_date__');
       const scannerPatternName = scannerMetaValue('__scanner_pattern_name__');
-      const scannerPattern = scannerPatternDate && isValidScannerPattern(scannerPatternName) ? `${{scannerPatternLabel(scannerPatternName)}} (${{String(scannerPatternDate).slice(0,10)}}) [scanner]` : '';
+      const secondAnchorDate = anchorDates[1] || '';
+      const scannerPatternAfterImpulse = scannerPatternDate && (!secondAnchorDate || compareTime(scannerPatternDate, secondAnchorDate) > 0);
+      const scannerPattern = scannerPatternAfterImpulse && isValidScannerPattern(scannerPatternName) ? `${{scannerPatternLabel(scannerPatternName)}} (${{String(scannerPatternDate).slice(0,10)}}) [scanner]` : '';
       const chartPattern = fibo618PatternFromChart();
       const recoveredPattern = chartPattern ? `${{scannerPatternLabel(chartPattern.name)}} (${{chartPattern.time}}) [61.8]` : '';
-      const pattern = touch ? candlePatternForRow(touch) : '-';
       lines.push('');
       lines.push(`FIB group: ${{gid}}`);
       lines.push('  FIB anchor:');
       lines.push(`  ${{anchorDatesLine}}`);
       lines.push(`  ${{anchorValuesLine}}`);
       lines.push(`  61.8 value: ${{Number.isFinite(value618) ? fmt(value618) : '-'}}`);
-      lines.push(`  61.8 pattern: ${{scannerPattern || recoveredPattern || (touch && pattern !== '-' ? `${{scannerPatternLabel(pattern)}} (${{touch.time}})` : '-')}}`);
+      lines.push(`  61.8 pattern: ${{scannerPattern || recoveredPattern || '-'}}`);
     }});
     lines.push('');
     lines.push(`CSV candles since first anchor (${{earliestAnchor || '-'}}):`);
@@ -3167,6 +3231,45 @@ class LightweightChartLevelSelectorUI:
     return chosen || null;
   }}
 
+  function scannerWedgeNeedsReanchor() {{
+    const rows = ohlc.filter(r => r && r.time && Number.isFinite(Number(r.close)));
+    const wedges = drawnObjects.filter(isWedgeLineObject);
+    const upper = wedges.find(obj => wedgeSide(obj) === 'upper');
+    const lower = wedges.find(obj => wedgeSide(obj) === 'lower');
+    if (!upper || !lower || rows.length < 8) return false;
+    const indexByDate = new Map(rows.map((row, idx) => [String(row.time).slice(0, 10), idx]));
+    const anchorIndices = [upper, lower].flatMap(obj => (obj.anchor_x || []).map(date => indexByDate.get(String(date).slice(0, 10)))).filter(Number.isFinite);
+    if (anchorIndices.length < 4) return false;
+    const establishedAt = Math.max(...anchorIndices);
+    const ranges = rows.slice(-30).map(row => Number(row.high) - Number(row.low)).filter(Number.isFinite);
+    const avgRange = ranges.length ? ranges.reduce((sum, value) => sum + value, 0) / ranges.length : 0;
+    const tolerance = Math.max(avgRange * 0.08, Math.abs(Number(rows.at(-1).close)) * 0.0005);
+    // The latest five sessions may be the live breakout. Older closes through
+    // either boundary mean the supplied anchors describe a burnt/incorrect
+    // wedge and should be replaced with a clean pair of candle extremes.
+    for (let idx = establishedAt + 1; idx < rows.length - 5; idx += 1) {{
+      const row = rows[idx];
+      const upperValue = lineValueForDate(upper, row.time);
+      const lowerValue = lineValueForDate(lower, row.time);
+      if (!Number.isFinite(upperValue) || !Number.isFinite(lowerValue)) continue;
+      if (Number(row.close) > upperValue + tolerance || Number(row.close) < lowerValue - tolerance) return true;
+    }}
+    return false;
+  }}
+
+  function reanchorInvalidScannerWedge() {{
+    // Only the dedicated manual-wedge save is authoritative here. Historical
+    // chart sessions sometimes marked an automatic scanner preview as saved,
+    // even though the user never created manual anchors; that stale flag must
+    // not prevent repair of a visibly burnt line.
+    if (wedgeOnlySavedForScanner || !scannerWedgeNeedsReanchor()) return false;
+    const candidate = findAlternativeWedgeCandidate('both');
+    if (!candidate) return false;
+    drawnObjects = drawnObjects.filter(obj => !isWedgeLineObject(obj)).concat(wedgeLineThroughExtremeObjects(candidate));
+    wedgeRouletteNoAlternative = false;
+    return true;
+  }}
+
   function restoreScannerWedgeFromRoulette() {{
     const scannerWedges=initialScannerDrawnObjects.filter(isWedgeLineObject);
     if (scannerWedges.length < 2) return false;
@@ -3368,20 +3471,35 @@ class LightweightChartLevelSelectorUI:
       || drawnObjects.find(obj => obj.type === 'fib' && String(obj.label || '').includes('61.8'));
     const level = Number(fib618?.price ?? fib618?.y0);
     if (!Number.isFinite(level)) return null;
+    const boundary = drawnObjects.find(obj => obj.type === 'fib-boundary' && (!fib618?.group_id || obj.group_id === fib618.group_id));
+    const secondAnchorDate = String(boundary?.x1 || '').slice(0,10);
+    const direction = String(fib618?.direction || (Number(boundary?.y1) >= Number(boundary?.y0) ? 'long' : 'short')).toLowerCase();
+    const directionalPattern = name => direction === 'short'
+      ? /shooting star|evening star|bearish|dark cloud cover/i.test(name)
+      : /hammer|morning star|bullish|piercing/i.test(name);
     let found = null;
     for (let i = 1; i < ohlc.length; i += 1) {{
       const first = ohlc[i - 1], second = ohlc[i];
+      if (secondAnchorDate && compareTime(second.time, secondAnchorDate) <= 0) continue;
       const o1 = Number(first.open), h1 = Number(first.high), l1 = Number(first.low), c1 = Number(first.close);
       const o2 = Number(second.open), h2 = Number(second.high), l2 = Number(second.low), c2 = Number(second.close);
       if (![o1, h1, l1, c1, o2, h2, l2, c2].every(Number.isFinite)) continue;
       const touches618 = (l1 <= level && level <= h1) || (l2 <= level && level <= h2);
       const darkCloud = c1 > o1 && c2 < o2 && o2 >= Math.max(o1, c1) * 0.995 && c2 < (o1 + c1) / 2 && c2 > o1 && c2 < level;
+      const bullishEngulfing = c1 < o1 && c2 > o2 && o2 <= c1 && c2 >= o1;
+      const bullishHarami = c1 < o1 && c2 > o2 && Math.min(o1,c1) <= Math.min(o2,c2) && Math.max(o2,c2) <= Math.max(o1,c1);
+      const bullishPiercing = c1 < o1 && c2 > o2 && o2 <= c1 && c2 >= (o1+c1)/2 && c2 < o1;
       const b1 = Math.abs(c1-o1), b2 = Math.abs(c2-o2);
       const lo1 = Math.min(o1,c1), hi1 = Math.max(o1,c1), lo2 = Math.min(o2,c2), hi2 = Math.max(o2,c2);
       const containedBearishHarami = c1 > o1 && c2 < o2 && b2 < b1 && lo1 <= lo2 && hi2 <= hi1;
       const fxMicroBearishHarami = c1 > o1 && c2 < o2 && b1 <= 0.00025 && b2 <= b1*2.05 && lo2 >= lo1-b1 && hi2 <= hi1+b1;
-      if (touches618 && (containedBearishHarami || fxMicroBearishHarami)) found = {{name:'bearish_harami', time:String(second.time).slice(0,10)}};
-      else if (touches618 && darkCloud) found = {{name:'dark_cloud_cover', time:String(second.time).slice(0,10)}};
+      const singlePattern = candlePatternForRow(second, i, ohlc);
+      if (touches618 && direction === 'long' && bullishEngulfing) found = {{name:'bullish_engulfing', time:String(second.time).slice(0,10)}};
+      else if (touches618 && direction === 'long' && bullishPiercing) found = {{name:'bullish_piercing_line', time:String(second.time).slice(0,10)}};
+      else if (touches618 && direction === 'long' && bullishHarami) found = {{name:'bullish_harami', time:String(second.time).slice(0,10)}};
+      else if (touches618 && direction === 'short' && (containedBearishHarami || fxMicroBearishHarami)) found = {{name:'bearish_harami', time:String(second.time).slice(0,10)}};
+      else if (touches618 && direction === 'short' && darkCloud) found = {{name:'dark_cloud_cover', time:String(second.time).slice(0,10)}};
+      else if (l2 <= level && level <= h2 && singlePattern !== '-' && directionalPattern(singlePattern)) found = {{name:singlePattern.replace(/\\s+/g,'_'), time:String(second.time).slice(0,10)}};
     }}
     if (!found) return null;
     const latest = ohlc[ohlc.length - 1]?.time;
@@ -3641,7 +3759,7 @@ class LightweightChartLevelSelectorUI:
     updateSetupDebugPanel();
   }}
 
-  const FX_TO_PLN = {{PLN:1, USD:3.92, EUR:4.25, GBP:5.05}};
+  const FX_TO_PLN = {json.dumps(_current_fx_to_pln_rates())};
 
   async function loadSharedBalance() {{
     if (!P.reportServer) return;
@@ -3739,8 +3857,15 @@ class LightweightChartLevelSelectorUI:
     setFieldState('pip-value', disabled || stockCfdOn, !disabled && !stockCfdOn);
     $('spread-mult-label').textContent = stockCfdOn ? 'Spread (price units; pips = spread / 0.01)' : 'Spread multiplier (spread = Multiplier * pip_value)';
     $('currency-fee-toggle').style.display = feeEligible ? 'block' : 'none';
-    $('currency-fee-toggle').textContent = `FX conversion fee 1%: ${{levels.apply_currency_conversion_fee ? 'ON' : 'OFF'}}`;
+    $('currency-fee-toggle').textContent = `FX conversion 1% (2 × 0.5%): ${{levels.apply_currency_conversion_fee ? 'ON' : 'OFF'}}`;
+    $('currency-fee-toggle').title = 'Effective broker rate = current market rate × 1.01: 0.5% conversion on purchase + 0.5% conversion on sale.';
     $('currency-fee-toggle').classList.toggle('active', !!levels.apply_currency_conversion_fee);
+    const brokerFeeInput = $('broker-fee-pct')?.value;
+    const brokerFeePct = brokerFeeInput !== '' && Number.isFinite(Number(brokerFeeInput))
+      ? Math.max(0, Number(brokerFeeInput))
+      : Math.max(0, Number(levels.broker_commission_pct ?? 0.2));
+    $('broker-fee-toggle').textContent = `Broker commission ${{numText(brokerFeePct, 2)}}%: ${{levels.apply_broker_commission ? 'ON' : 'OFF'}}`;
+    $('broker-fee-toggle').classList.toggle('active', !!levels.apply_broker_commission);
   }}
 
   function chartGroupOpenUrl(command) {{
@@ -3881,6 +4006,7 @@ class LightweightChartLevelSelectorUI:
   $('capital').addEventListener('change', saveSharedBalance);
   $('lot-cost').value = levels.lot_cost && levels.lot_cost !== 0 ? levels.lot_cost : ''; $('pip-value').value = levels.__stock_cfd_mode__ ? 1 : ((levels.pip_value && levels.pip_value !== 0) ? levels.pip_value : '');
   $('spread-mult').value = levels.spread_multiplier && levels.spread_multiplier !== 0 ? levels.spread_multiplier : '';
+  $('broker-fee-pct').value = Number(levels.broker_commission_pct ?? 0.2);
   $('tool-line').onclick = () => {{
     if(!scannerWedgeAvailable) {{$('line-tool-group').classList.toggle('kind-open');return;}}
     const same=activeTool==='line';clearPreviews();activeTool=same?'level':'line';activeField=null;fibAnchor=halfAnchor=null;updatePanel();
@@ -3920,6 +4046,8 @@ class LightweightChartLevelSelectorUI:
   $('reset-all').onclick = () => {{ levels = {{}}; levelPoints = {{}}; drawnObjects = []; lineAnchor=fibAnchor=halfAnchor=null; activeTool='level'; activeField=null; $('calculation-currency').value='PLN'; setCalculationCurrencyButtons('PLN'); render(); applyInstrumentControls(); }};
   $('stock-cfd-toggle').onclick = () => {{ levels.__stock_cfd_mode__ = !levels.__stock_cfd_mode__; if (levels.__stock_cfd_mode__) $('pip-value').value = 1; applyInstrumentControls(); }};
   $('currency-fee-toggle').onclick = () => {{ levels.apply_currency_conversion_fee = !levels.apply_currency_conversion_fee; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
+  $('broker-fee-toggle').onclick = () => {{ levels.apply_broker_commission = !levels.apply_broker_commission; applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }};
+  $('broker-fee-pct').addEventListener('input', () => {{ levels.broker_commission_pct = Math.max(0, Number($('broker-fee-pct').value || 0)); applyInstrumentControls(); if ($('calc-drawer').classList.contains('open')) calculatePosition(true); }});
   document.querySelectorAll('#calculation-currency-buttons button[data-currency]').forEach(btn => btn.onclick = () => changeCalculationCurrency(btn.dataset.currency || 'PLN', true));
   $('setup-debug-btn').onclick = () => copySetupDebug();
   $('debug-tools').onclick = () => selectedJournalTechnique()==='Kliny'?renderGeometryEditor('wedge'):renderDebugChooser();
@@ -4493,6 +4621,12 @@ class LightweightChartLevelSelectorUI:
 
   function collectLevelsForSave(finished=false) {{
     const stockCfdMode = !!levels.__stock_cfd_mode__;
+    const selectedLevelValue = field => {{
+      const pointValue = Number(levelPoints[field]?.price);
+      if (Number.isFinite(pointValue) && pointValue > 0) return pointValue;
+      const levelValue = Number(levels[field]);
+      return Number.isFinite(levelValue) ? levelValue : 0;
+    }};
     const pipValue = stockCfdMode ? 1 : Number($('pip-value').value || 0);
     const spreadMult = Number($('spread-mult').value || 0);
     const currentFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
@@ -4508,6 +4642,14 @@ class LightweightChartLevelSelectorUI:
       position_type:$('position-type').value,
       capital:roundPrice(Number($('capital').value || 255000)),
       calculation_currency:String($('calculation-currency').value || 'PLN').toUpperCase(),
+      entry:selectedLevelValue('entry'),
+      stop_loss:selectedLevelValue('stop_loss'),
+      high:selectedLevelValue('high'),
+      low:selectedLevelValue('low'),
+      check_zr_value_fibo_or_elevation:selectedLevelValue('check_zr_value_fibo_or_elevation'),
+      line_cross_value:selectedLevelValue('line_cross_value'),
+      apply_broker_commission:!!levels.apply_broker_commission,
+      broker_commission_pct:$('broker-fee-pct').value !== '' && Number.isFinite(Number($('broker-fee-pct').value)) ? Math.max(0,Number($('broker-fee-pct').value)) : 0.2,
       lot_cost:roundPrice(Number($('lot-cost').value || 0)),
       pip_value:Number(pipValue.toFixed(4)),
       spread_multiplier:Number(spreadMult.toFixed(4)),
@@ -4526,8 +4668,18 @@ class LightweightChartLevelSelectorUI:
     const n = Number(v || 0);
     return n.toLocaleString(undefined, {{minimumFractionDigits:digits, maximumFractionDigits:digits}});
   }}
+  function calculationChip(icon, label, value, tone='', state=null, title='') {{
+    const kind = String(label || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const stateHtml = state == null ? '' : `<em class="calc-chip-state ${{state ? 'on' : ''}}">${{state ? 'ON' : 'OFF'}}</em>`;
+    return `<span class="calc-chip calc-chip-${{kind}} ${{tone}} ${{state == null ? '' : 'has-state'}}"${{title ? ` title="${{title}}"` : ''}}><i class="calc-chip-icon">${{icon}}</i><span class="calc-chip-copy"><small class="calc-chip-label">${{label}}${{stateHtml}}</small><strong class="calc-chip-value">${{value || '&nbsp;'}}</strong></span></span>`;
+  }}
+  function calculationCoreChip(instrument, position, entry, stopLoss) {{
+    const segment = (icon, label, value, tone='') => `<span class="calc-core-segment ${{tone}}"><i class="calc-chip-icon">${{icon}}</i><span class="calc-chip-copy"><small class="calc-chip-label">${{label}}</small><strong class="calc-chip-value">${{value}}</strong></span></span>`;
+    return `<span class="calc-chip calc-core-chip">${{segment('▥','Instrument',instrument)}}${{segment(position === 'LONG' ? '↑' : '↓','Position',position,position === 'LONG' ? 'positive' : 'danger')}}${{segment('◎','Entry',entry,'positive')}}${{segment('⬟','Stop loss',stopLoss,'danger')}}</span>`;
+  }}
   function renderCalculation(data) {{
     const drawer = $('calc-drawer'), summary = $('calc-summary'), table = $('calc-table'), warnings = $('calc-warnings');
+    const wasOpen = drawer.classList.contains('open');
     $('calc-title').textContent='Position calculation';
     drawer.querySelector('.calc-toolbar')?.classList.remove('debug-instrument');
     $('debug-report-identity').textContent='';
@@ -4537,48 +4689,47 @@ class LightweightChartLevelSelectorUI:
     $('calc-drawer').closest('.main')?.classList.add('calc-open');
     if (!data || !data.ok) {{
       const needsTradingDetails = !levels.__stock_cfd_mode__ && P.instrumentType !== 'stock';
-      summary.innerHTML = [
-        '<b>Unable to calculate position.</b>',
-        '<span><b>Data required for calculation:</b> entry price, stop loss, and current capital.</span>',
-        needsTradingDetails ? '<span>For Forex and commodities also provide lot cost and pip value.</span>' : '',
-        '<span>Check the data and try again.</span>'
-      ].filter(Boolean).join('');
+      summary.innerHTML = `<span class="calc-summary-error">Unable to calculate position. Select entry, stop loss and current capital.${{needsTradingDetails ? ' Forex and commodities also require lot cost and pip value.' : ''}}</span>`;
       table.innerHTML = ''; warnings.innerHTML = ''; return;
     }}
     const currency = data.currency || 'PLN';
     const b = data.basics || {{}};
     const chips = [];
-    chips.push(`<span><b>Instrument:</b> ${{data.instrument_type || P.instrumentType}}</span>`);
-    chips.push(`<span><b>Position:</b> ${{(data.position_type || $('position-type').value || 'long').toUpperCase()}}</span>`);
-    if (Number.isFinite(Number(b.entry))) chips.push(`<span><b>Entry:</b> ${{fmt(Number(b.entry))}}</span>`);
-    if (Number.isFinite(Number(b.stop_loss))) chips.push(`<span><b>Stop loss:</b> ${{fmt(Number(b.stop_loss))}}</span>`);
-    if (Number.isFinite(Number(b.max_capital))) chips.push(`<span><b>${{b.max_capital_is_avg10d ? 'Max capital to engage (1% Avg10d)' : 'Max capital to engage'}}:</b> ${{money(b.max_capital, b.max_capital_currency || currency)}}</span>`);
-    if (data.fx_conversion_fee_applicable) chips.push(`<span><b>FX conversion fee ${{numText(data.fx_conversion_fee_pct || 1, 0)}}%:</b> ${{data.fx_conversion_fee_enabled ? 'ON' : 'OFF'}}</span>`);
-    if (Number.isFinite(Number(b.lot_cost))) chips.push(`<span><b>Lot cost:</b> ${{money(b.lot_cost, currency)}}</span>`);
-    if (Number.isFinite(Number(b.spread))) chips.push(`<span><b>Spread:</b> ${{numText(b.spread, 4)}}</span>`);
-    if (data.take_profit != null) chips.push(`<span><b>Take profit:</b> ${{fmt(Number(data.take_profit))}}</span>`);
-    if (data.risk_reward != null) chips.push(`<span><b>Risk/reward:</b> ${{numText(data.risk_reward, 2)}}:1</span>`);
-    if (data.profit != null) chips.push(`<span><b>Profit:</b> ${{money(data.profit, currency)}} (${{numText(data.profit_percent, 2)}}%)</span>`);
-    if (data.zr_ratio != null) chips.push(`<span><b>Additional Z/R:</b> ${{numText(data.zr_ratio, 2)}}:1</span>`);
+    const position = (data.position_type || $('position-type').value || 'long').toUpperCase();
+    chips.push(calculationCoreChip(data.instrument_type || P.instrumentType, position, Number.isFinite(Number(b.entry)) ? fmt(Number(b.entry)) : '--', Number.isFinite(Number(b.stop_loss)) ? fmt(Number(b.stop_loss)) : '--'));
+    if (b.instrument_currency && b.instrument_currency !== currency) {{
+      const effectiveRate = `${{numText(b.instrument_to_calculation_rate, 4)}} ${{currency}}`;
+      const rateTitle = data.fx_conversion_fee_enabled ? `${{numText(b.market_conversion_rate, 4)}} market × 1.01 (0.5% buy + 0.5% sell) = ${{effectiveRate}}` : `Current market rate: ${{effectiveRate}}`;
+      chips.push(calculationChip('↔', `${{data.fx_conversion_fee_enabled ? 'Broker FX rate' : 'Market FX rate'}} (${{b.instrument_currency}}/${{currency}})`, effectiveRate, 'positive', null, rateTitle));
+    }}
+    if (Number.isFinite(Number(b.max_capital))) chips.push(calculationChip('◕', b.max_capital_is_avg10d ? 'Max capital to engage (1% Avg10d)' : 'Max capital to engage', money(b.max_capital, b.max_capital_currency || currency)));
+    if (data.fx_conversion_fee_applicable) chips.push(calculationChip('↔', `FX conversion ${{numText(data.fx_conversion_fee_pct ?? 1, 1)}}% (2 × 0.5%)`, '', 'positive', data.fx_conversion_fee_enabled));
+    chips.push(calculationChip('%', `Broker commission ${{numText(data.broker_commission_pct ?? 0.2, 2)}}%`, '', 'fee', data.broker_commission_enabled));
+    const wedgeCalculation = drawnObjects.some(isWedgeLineObject);
+    if (wedgeCalculation && data.take_profit != null) chips.push(calculationChip('◇', 'Take profit', fmt(Number(data.take_profit)), 'positive'));
+    if (wedgeCalculation && data.risk_reward != null) chips.push(calculationChip('⚖', 'Risk / reward', `${{numText(data.risk_reward, 2)}}:1`));
+    if (wedgeCalculation && data.profit != null) chips.push(calculationChip('+', 'Projected profit', `${{money(data.profit, currency)}} (${{numText(data.profit_percent, 2)}}%)`, 'positive'));
+    const userMarkedZr = !!levelPoints.check_zr_value_fibo_or_elevation && !levelPoints.check_zr_value_fibo_or_elevation.auto_wedge;
+    if (userMarkedZr && data.zr_ratio != null) chips.push(calculationChip('⌁', 'Additional Z/R', `${{numText(data.zr_ratio, 2)}}:1`));
     summary.innerHTML = chips.join('');
     table.innerHTML = `<table><thead><tr><th>Risk Level</th><th>Position Size</th><th>Engaged Capital</th><th>Potential Loss With Spread</th><th>Loss %</th></tr></thead><tbody>${{(data.rows||[]).map(r => `<tr><td>${{r.risk_label}}</td><td>${{numText(r.position_size, r.position_unit === 'Shares' ? 0 : 3)}} ${{r.position_unit}}</td><td>${{money(r.capital_used, currency)}}</td><td>${{money(r.potential_loss, currency)}}</td><td>${{numText(r.loss_percent, 2)}}%</td></tr>`).join('')}}</tbody></table>`;
     warnings.innerHTML = (data.warnings || []).map(w => `<div>⚠️ ${{w}}</div>`).join('');
-    requestAnimationFrame(() => {{
-      document.documentElement.style.setProperty('--calc-drawer-height', `${{Math.ceil(drawer.getBoundingClientRect().height + 10)}}px`);
-      window.dispatchEvent(new Event('resize'));
-      applyVerticalPan();
-    }});
+    if (!wasOpen && preferredDrawerHeight <= 0) setDrawerHeight(340);
+    requestAnimationFrame(() => {{ window.dispatchEvent(new Event('resize')); applyVerticalPan(); }});
   }}
   async function calculatePosition(show=true) {{
     const current = collectLevelsForSave(false);
+    const requestId = ++calculationRequestId;
     try {{
       const resp = await fetch('/calculate', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{levels:current}})}});
       const data = await resp.json();
+      if (requestId !== calculationRequestId) return data;
       if (data && data.ok) levels = {{...levels, position_calculations:data}};
       if (show) renderCalculation(data);
       return data;
     }} catch(e) {{
       const data = {{ok:false, error:String(e)}};
+      if (requestId !== calculationRequestId) return data;
       if (show) renderCalculation(data);
       return data;
     }}
@@ -4764,6 +4915,7 @@ class LightweightChartLevelSelectorUI:
   if (!P.reportLaunched) {{ window.addEventListener('beforeunload', () => navigator.sendBeacon('/shutdown')); }}
   setupChartGroupNav();
   const scannerWedgePreloaded = initialScannerDrawnObjects.some(obj => obj.type === 'wedge' || obj.group_id === 'auto-wedge');
+  const scannerWedgeReanchored = scannerWedgePreloaded && reanchorInvalidScannerWedge();
 
   $('chart-wrap')?.addEventListener('mousemove', (ev) => {{
     const tip = $('scanner-highlight-tooltip');
@@ -4779,7 +4931,7 @@ class LightweightChartLevelSelectorUI:
   }});
   $('chart-wrap')?.addEventListener('mouseleave', () => {{ const tip = $('scanner-highlight-tooltip'); if (tip) tip.style.display = 'none'; }});
 
-  applyWedgeDerivedLevels(scannerWedgePreloaded); applyScannerSetupStopLoss(true); applyInstrumentControls(); render(); refreshFavoriteStar(); syncFavoritesFromReport();
+  applyWedgeDerivedLevels(scannerWedgePreloaded || scannerWedgeReanchored); applyScannerSetupStopLoss(true); applyInstrumentControls(); render(); refreshFavoriteStar(); syncFavoritesFromReport();
 }})();
   </script>
 </body>
@@ -4811,9 +4963,9 @@ class LightweightChartLevelSelectorUI:
 
         def _instrument_currency() -> str:
             source = str(self.source_ticker or self.symbol or "").upper()
-            if source.endswith(".US") or source.endswith(".F") or "USD" in source:
+            if source.endswith(".US") or "USD" in source:
                 return "USD"
-            if source.endswith((".DE", ".FR", ".NL", ".ES", ".IT")) or "EUR" in source:
+            if source.endswith((".DE", ".F", ".FR", ".NL", ".ES", ".IT")) or "EUR" in source:
                 return "EUR"
             if source.endswith(".L") or "GBP" in source:
                 return "GBP"
@@ -4825,8 +4977,17 @@ class LightweightChartLevelSelectorUI:
         try:
             stock_currency_matches = effective_instrument == "stock" and currency == _instrument_currency()
             fx_fee_applicable = bool(levels.get("__currency_fee_eligible__")) and not stock_currency_matches
+            broker_commission_pct_display = max(0.0, _num("broker_commission_pct", 0.2))
+            broker_commission_pct = broker_commission_pct_display / 100.0 if levels.get("apply_broker_commission") else 0.0
             if effective_instrument == "stock":
-                conversion_fee_pct = float(levels.get("currency_conversion_fee_pct", 0.01) or 0.01) if fx_fee_applicable and levels.get("apply_currency_conversion_fee") else 0.0
+                instrument_currency = _instrument_currency()
+                fx_to_pln = _current_fx_to_pln_rates()
+                market_conversion_rate = fx_to_pln.get(instrument_currency, 1.0) / fx_to_pln.get(currency, 1.0)
+                fx_markup_pct = BROKER_FX_ROUND_TRIP_MARKUP_PCT if fx_fee_applicable and levels.get("apply_currency_conversion_fee") else 0.0
+                instrument_to_calculation_rate = market_conversion_rate * (1.0 + fx_markup_pct)
+                calculation_entry = entry * instrument_to_calculation_rate
+                calculation_stop_loss = stop_loss * instrument_to_calculation_rate
+                total_transaction_fee_pct = broker_commission_pct
                 max_capital = capital
                 avg_turnover_10d = None
                 try:
@@ -4834,7 +4995,7 @@ class LightweightChartLevelSelectorUI:
                         turnover = (pd.to_numeric(self.df["Close"], errors="coerce") * pd.to_numeric(self.df["Volume"], errors="coerce")).dropna()
                         if len(turnover) >= 10:
                             avg_turnover_10d = float(turnover.tail(10).mean())
-                            max_capital = avg_turnover_10d * 0.01
+                            max_capital = avg_turnover_10d * 0.01 * instrument_to_calculation_rate
                         else:
                             warnings.append("Turnover history is short; max capital uses available capital.")
                     else:
@@ -4842,7 +5003,7 @@ class LightweightChartLevelSelectorUI:
                 except Exception as exc:
                     warnings.append(f"Could not derive turnover max capital: {exc}")
                 for risk in risk_levels:
-                    result = calculate_stock_position(entry, stop_loss, capital, risk, max_capital, conversion_fee_pct=conversion_fee_pct, position_type=position_type)
+                    result = calculate_stock_position(calculation_entry, calculation_stop_loss, capital, risk, max_capital, conversion_fee_pct=total_transaction_fee_pct, position_type=position_type)
                     rows.append({
                         "risk": risk,
                         "risk_label": f"{risk * 100:.1f}%",
@@ -4856,7 +5017,10 @@ class LightweightChartLevelSelectorUI:
                     "entry": entry,
                     "stop_loss": stop_loss,
                     "max_capital": round(max_capital, 2),
-                    "max_capital_currency": _instrument_currency(),
+                    "max_capital_currency": currency,
+                    "instrument_currency": instrument_currency,
+                    "market_conversion_rate": round(market_conversion_rate, 6),
+                    "instrument_to_calculation_rate": round(instrument_to_calculation_rate, 6),
                     "avg_turnover_10d": None if avg_turnover_10d is None else round(avg_turnover_10d, 2),
                     "max_capital_is_avg10d": avg_turnover_10d is not None,
                 }
@@ -4870,6 +5034,7 @@ class LightweightChartLevelSelectorUI:
                 if pip_value <= 0:
                     return {"ok": False, "error": "Pip value must be greater than zero before calculating."}
                 conversion_fee_pct = float(levels.get("currency_conversion_fee_pct", 0.01) or 0.01) if levels.get("apply_currency_conversion_fee") else 0.0
+                total_transaction_fee_pct = conversion_fee_pct + broker_commission_pct
                 for risk in risk_levels:
                     result = calculate_position_size(
                         entry=entry,
@@ -4882,7 +5047,7 @@ class LightweightChartLevelSelectorUI:
                         pip_size=pip_size,
                         position_type=position_type,
                         instrument_type=effective_instrument,
-                        conversion_fee_pct=conversion_fee_pct,
+                        conversion_fee_pct=total_transaction_fee_pct,
                     )
                     rows.append({
                         "risk": risk,
@@ -4905,11 +5070,16 @@ class LightweightChartLevelSelectorUI:
                     base = next((r for r in rows if float(r.get("position_size", 0) or 0) > 0), None)
                     if base and float(base.get("potential_loss", 0) or 0) > 0:
                         if base["position_unit"] == "Shares":
-                            profit = float(base["position_size"]) * ((take_profit - entry) if position_type == "long" else (entry - take_profit))
+                            native_profit = float(base["position_size"]) * ((take_profit - entry) if position_type == "long" else (entry - take_profit))
+                            profit = native_profit * instrument_to_calculation_rate
                         else:
                             pip_size = _num("pip_size", 0.0001 if effective_instrument == "forex" else 1.0)
                             pip_value = 1.0 if stock_cfd_mode else _num("pip_value")
                             profit = abs(take_profit - entry) / pip_size * float(base["position_size"]) * pip_value
+                        if broker_commission_pct > 0:
+                            entry_notional = float(base.get("capital_used", 0.0) or 0.0)
+                            exit_notional = entry_notional * abs(take_profit / entry) if entry else entry_notional
+                            profit -= (entry_notional + exit_notional) * broker_commission_pct
                         profit_percent = (profit / capital) * 100 if capital else None
                         risk_reward = profit / float(base["potential_loss"])
                 except Exception as exc:
@@ -4929,7 +5099,9 @@ class LightweightChartLevelSelectorUI:
                 "currency": currency,
                 "fx_conversion_fee_applicable": fx_fee_applicable,
                 "fx_conversion_fee_enabled": bool(levels.get("apply_currency_conversion_fee")) and fx_fee_applicable,
-                "fx_conversion_fee_pct": round(float(levels.get("currency_conversion_fee_pct", 0.01) or 0.01) * 100, 2),
+                "fx_conversion_fee_pct": BROKER_FX_ROUND_TRIP_MARKUP_PCT * 100,
+                "broker_commission_enabled": bool(levels.get("apply_broker_commission")),
+                "broker_commission_pct": round(broker_commission_pct_display, 4),
                 "rows": rows,
                 "basics": basics,
                 "take_profit": None if take_profit is None else round(float(take_profit), self._precision_for_price(take_profit)),

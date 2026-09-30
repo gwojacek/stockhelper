@@ -1,0 +1,13 @@
+{
+  "__show_ichimoku__": true,
+  "__journal_source_technique__": "Ichimoku",
+  "lot_cost": 16149.96,
+  "pip_value": 364.13,
+  "spread_multiplier": 0.25,
+  "spread": 91.03,
+  "__scanner_breakout_date__": "2026-04-30",
+  "__scanner_breakout_direction__": "long",
+  "__scanner_retest_count__": "3",
+  "__scanner_latest_retest_date__": "2026-09-25",
+  "__scanner_latest_retest_pattern__": "bullish_engulfing"
+}

@@ -802,7 +802,11 @@ def run_level_selector(raw_args=None):
 
 
     def _saved_wedge_is_active() -> bool:
-        if existing.get("__saved_wedge_by_user__") is False:
+        # Scanner previews from older sessions may have wedge objects without
+        # the marker. They must not override fresh scanner anchors forever.
+        # Only an explicit user save is authoritative; dedicated wedge-only
+        # saves are handled separately below.
+        if existing.get("__saved_wedge_by_user__") is not True:
             return False
         objects = existing.get("drawn_objects") if isinstance(existing, dict) else None
         if not isinstance(objects, list) or df.empty:
@@ -815,6 +819,19 @@ def run_level_selector(raw_args=None):
         if lower is None:
             lower = next((obj for obj in wedges if obj is not upper), None)
         if lower is None:
+            return False
+
+        def _legacy_scanner_projection(obj) -> bool:
+            anchor_x = obj.get("anchor_x")
+            anchor_y = obj.get("anchor_y")
+            has_real_anchors = isinstance(anchor_x, list) and isinstance(anchor_y, list) and len(anchor_x) >= 2 and len(anchor_y) >= 2
+            return (
+                not has_real_anchors
+                and obj.get("group_id") == "auto-wedge"
+                and str(obj.get("label", "")).lower().startswith("falling wedge")
+            )
+
+        if _legacy_scanner_projection(upper) or _legacy_scanner_projection(lower):
             return False
 
         def _anchors(obj):

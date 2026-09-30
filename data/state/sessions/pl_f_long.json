@@ -1,15 +1,15 @@
 {
-  "__show_ichimoku__": false,
-  "__journal_source_technique__": "Fibo",
-  "lot_cost": 101660.85,
-  "pip_value": 568.92,
+  "__show_ichimoku__": true,
+  "__journal_source_technique__": "Ichimoku",
+  "lot_cost": 100307.57,
+  "pip_value": 575.85,
   "drawn_objects": [
     {
       "id": "auto-fibo-0",
       "type": "fib",
       "label": "FIB 0% (1936.8)",
       "x0": "2026-09-09",
-      "x1": "2034-08-11",
+      "x1": "2034-08-12",
       "y0": 1936.8,
       "y1": 1936.8,
       "price": 1936.8,
@@ -22,7 +22,7 @@
       "type": "fib",
       "label": "FIB 23.6% (1843.0608)",
       "x0": "2026-08-24",
-      "x1": "2034-08-11",
+      "x1": "2034-08-12",
       "y0": 1843.0608,
       "y1": 1843.0608,
       "price": 1843.0608,
@@ -35,7 +35,7 @@
       "type": "fib",
       "label": "FIB 38.2% (1785.0696)",
       "x0": "2026-08-13",
-      "x1": "2034-08-11",
+      "x1": "2034-08-12",
       "y0": 1785.0696,
       "y1": 1785.0696,
       "price": 1785.0696,
@@ -48,7 +48,7 @@
       "type": "fib",
       "label": "FIB 50% (1738.2)",
       "x0": "2026-08-05",
-      "x1": "2034-08-11",
+      "x1": "2034-08-12",
       "y0": 1738.2,
       "y1": 1738.2,
       "price": 1738.2,
@@ -61,7 +61,7 @@
       "type": "fib",
       "label": "FIB 61.8% (1691.3304)",
       "x0": "2026-07-28",
-      "x1": "2034-08-11",
+      "x1": "2034-08-12",
       "y0": 1691.3304,
       "y1": 1691.3304,
       "price": 1691.3304,
@@ -74,7 +74,7 @@
       "type": "fib",
       "label": "FIB 100% (1539.6)",
       "x0": "2026-07-01",
-      "x1": "2034-08-11",
+      "x1": "2034-08-12",
       "y0": 1539.6,
       "y1": 1539.6,
       "price": 1539.6,
@@ -94,5 +94,11 @@
       "group_id": "auto-fibo"
     }
   ],
-  "__saved_fibo_by_user__": false
+  "__saved_fibo_by_user__": false,
+  "__scanner_breakout_date__": "2026-08-21",
+  "__scanner_breakout_direction__": "long",
+  "__scanner_retest_count__": "1",
+  "__scanner_latest_retest_date__": "2026-09-03",
+  "__scanner_latest_retest_pattern__": "morning_star",
+  "__scanner_previous_respect_months__": "5.6"
 }

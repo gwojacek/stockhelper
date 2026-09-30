@@ -165,10 +165,35 @@ def test_chart_sidebar_has_report_compatible_favorite_star_next_to_name():
 def test_position_calculation_displays_one_percent_avg10d_with_market_currency():
     source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
 
-    assert "max_capital = avg_turnover_10d * 0.01" in source
-    assert '"max_capital_currency": _instrument_currency()' in source
+    assert "max_capital = avg_turnover_10d * 0.01 * instrument_to_calculation_rate" in source
+    assert '"max_capital_currency": currency' in source
     assert "Max capital to engage (1% Avg10d)" in source
     assert "money(b.max_capital, b.max_capital_currency || currency)" in source
+
+
+def test_stock_position_prices_are_converted_to_the_selected_capital_currency():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert "def _current_fx_to_pln_rates()" in source
+    assert "get_fx_to_pln_rate_yahoo(currency)" in source
+    assert 'forex_dir / f"{currency}PLN.csv"' in source
+    assert "calculation_entry = entry * instrument_to_calculation_rate" in source
+    assert "calculation_stop_loss = stop_loss * instrument_to_calculation_rate" in source
+    assert "calculate_stock_position(calculation_entry, calculation_stop_loss" in source
+    assert "profit = native_profit * instrument_to_calculation_rate" in source
+    assert "'Broker FX rate' : 'Market FX rate'" in source
+
+
+def test_broker_fx_rate_uses_current_market_rate_plus_round_trip_one_percent():
+    source = Path("chart_program/lightweight_chart_ui.py").read_text(encoding="utf-8")
+
+    assert "BROKER_FX_ROUND_TRIP_MARKUP_PCT = 0.01" in source
+    assert "market_conversion_rate * (1.0 + fx_markup_pct)" in source
+    assert "total_transaction_fee_pct = broker_commission_pct" in source
+    assert "FX conversion 1% (2 × 0.5%)" in source
+    assert "Effective broker rate = current market rate × 1.01" in source
+    assert "0.5% buy + 0.5% sell" in source
+    assert '"market_conversion_rate": round(market_conversion_rate, 6)' in source
 
 
 def test_quick_chart_group_has_market_and_direction_filters():
