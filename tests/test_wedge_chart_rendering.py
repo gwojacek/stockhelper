@@ -458,13 +458,17 @@ def test_position_calculation_summary_uses_colored_semantic_cards():
     assert ".calc-chip.positive" in source
     assert ".calc-chip.danger" in source
     assert "function calculationChip(icon, label, value, tone='', state=null, title='')" in source
-    assert "Position size (${{headlineRow.risk_label}} risk)" in source
+    assert "Position size (${{headlineRow.risk_label}} risk)" not in source
     assert "Broker commission ${{numText(data.broker_commission_pct ?? 0.2, 2)}}%" in source
     assert "calc-chip-state ${{state ? 'on' : ''}}" in source
     assert ".calc-chip.positive .calc-chip-icon" in source
     assert ".calc-chip.positive .calc-chip-value" not in source
     assert "data.broker_commission_enabled ? 'Included' : 'Not included'" not in source
     assert "const effectiveRate = `${{numText(b.instrument_to_calculation_rate, 4)}} ${{currency}}`" in source
+    assert "grid-template-columns:repeat(auto-fit,minmax(108px,1fr))" in source
+    assert "Max capital to engage (1% Avg10d)" in source
+    assert "FX conversion ${{numText(data.fx_conversion_fee_pct ?? 1, 1)}}% (2 × 0.5%)" in source
+    assert "Additional Z/R" in source
 
 
 def test_fx_toggle_recalculation_keeps_selected_chart_levels_and_latest_request():

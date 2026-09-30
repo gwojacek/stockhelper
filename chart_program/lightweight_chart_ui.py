@@ -730,15 +730,14 @@ class LightweightChartLevelSelectorUI:
     .calc-toolbar.debug-instrument {{ position:relative; padding:10px 12px; border:1px solid #29415f; border-radius:9px; background:#071426; }} .debug-report-identity {{ display:none; min-width:0; text-align:center; }} .debug-instrument .debug-report-identity {{ display:block; position:absolute; left:50%; top:50%; width:min(34vw,440px); transform:translate(-50%,-50%); }} .debug-report-identity strong {{ display:block; color:#f8fafc; font-size:15px; }} .debug-report-identity span {{ display:block; margin-top:2px; color:#93c5fd; font-size:12px; }}
     .debug-data-section {{ margin-top:14px; padding:12px; border:1px solid #29415f; border-radius:10px; background:#071426; }} .debug-data-section h4 {{ margin:0 0 8px; color:#c4b5fd; }}
     .debug-data-section table {{ width:100% !important; min-width:680px !important; max-width:none !important; }}
-    #calc-summary {{ display:flex; align-items:stretch; gap:8px; min-width:0; overflow-x:auto; padding:1px 2px 4px; scrollbar-width:thin; }}
-    .calc-chip {{ flex:0 0 auto; min-width:92px; max-width:190px; display:grid; grid-template-columns:24px minmax(0,1fr); gap:6px; align-items:center; padding:7px 8px; border:1px solid #244766; border-radius:9px; background:linear-gradient(145deg,rgba(14,36,62,.94),rgba(7,24,44,.96)); box-shadow:inset 0 1px 0 rgba(148,163,184,.08); }}
-    .calc-chip-position-size-1-0-risk {{ min-width:185px; }} .calc-chip-broker-fx-rate,.calc-chip-market-fx-rate {{ min-width:145px; }} .calc-chip-max-capital-1-avg10d {{ min-width:165px; }}
+    #calc-summary {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(108px,1fr)); align-items:stretch; gap:8px; width:100%; min-width:0; padding:1px 2px 4px; }}
+    .calc-chip {{ min-width:0; display:grid; grid-template-columns:24px minmax(0,1fr); gap:6px; align-items:center; padding:7px 8px; border:1px solid #244766; border-radius:9px; background:linear-gradient(145deg,rgba(14,36,62,.94),rgba(7,24,44,.96)); box-shadow:inset 0 1px 0 rgba(148,163,184,.08); }}
     .calc-chip-icon {{ display:grid; place-items:center; width:24px; height:28px; color:#60a5fa; font-size:20px; font-style:normal; }}
     .calc-chip-copy {{ min-width:0; }} .calc-chip-label {{ display:block; color:#8fb4d4; font-size:11px; line-height:1.15; }} .calc-chip-value {{ display:block; margin-top:3px; color:#eef6ff; font-size:14px; font-weight:900; line-height:1.15; white-space:normal; }}
     .calc-chip.positive .calc-chip-icon {{ color:#4ade80; }} .calc-chip.danger .calc-chip-icon {{ color:#fb7185; }} .calc-chip.fee .calc-chip-icon {{ color:#c084fc; }}
     .calc-chip-state {{ display:inline-block; margin-left:5px; padding:1px 5px; border:1px solid #52677f; border-radius:4px; color:#94a3b8; font-size:10px; font-style:normal; }} .calc-chip-state.on {{ border-color:#22c55e; background:rgba(21,128,61,.24); color:#86efac; }}
     .calc-summary-error {{ color:#fecaca; font-weight:800; }}
-    @media(max-width:900px) {{ .calc-toolbar {{ grid-template-columns:1fr auto; }} #calc-summary {{ grid-column:1/-1; grid-row:2; }} }}
+    @media(max-width:1100px) {{ .calc-toolbar {{ grid-template-columns:1fr auto; }} #calc-summary {{ grid-column:1/-1; grid-row:2; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); }} }}
     #calc-warnings {{ margin-top:6px; color:#facc15; font-size:12px; }}
     #wedge-debug-panel {{ display:none; margin-top:10px; padding:10px; border:1px solid #334155; border-radius:10px; background:#0f172a; color:#dbeafe; font-size:12px; line-height:1.35; max-height:42vh; overflow:auto; white-space:pre-wrap; }}
     #wedge-debug-panel.open {{ display:block; }}
@@ -4692,21 +4691,14 @@ class LightweightChartLevelSelectorUI:
     chips.push(calculationChip(position === 'LONG' ? '↑' : '↓', 'Position', position, position === 'LONG' ? 'positive' : 'danger'));
     if (Number.isFinite(Number(b.entry))) chips.push(calculationChip('◎', 'Entry', fmt(Number(b.entry)), 'positive'));
     if (Number.isFinite(Number(b.stop_loss))) chips.push(calculationChip('⬟', 'Stop loss', fmt(Number(b.stop_loss)), 'danger'));
-    const headlineRow = (data.rows || []).find(row => Math.abs(Number(row.risk) - 0.01) < 0.00001) || (data.rows || [])[0];
-    if (headlineRow) chips.push(calculationChip('▱', `Position size (${{headlineRow.risk_label}} risk)`, `${{numText(headlineRow.position_size, headlineRow.position_unit === 'Shares' ? 0 : 3)}} ${{headlineRow.position_unit}} · ${{money(headlineRow.capital_used, currency)}}`, 'fee'));
     if (b.instrument_currency && b.instrument_currency !== currency) {{
       const effectiveRate = `${{numText(b.instrument_to_calculation_rate, 4)}} ${{currency}}`;
       const rateTitle = data.fx_conversion_fee_enabled ? `${{numText(b.market_conversion_rate, 4)}} market × 1.01 (0.5% buy + 0.5% sell) = ${{effectiveRate}}` : `Current market rate: ${{effectiveRate}}`;
-      chips.push(calculationChip('↔', data.fx_conversion_fee_enabled ? 'Broker FX rate' : 'Market FX rate', effectiveRate, 'positive', data.fx_conversion_fee_enabled, rateTitle));
+      chips.push(calculationChip('↔', `${{data.fx_conversion_fee_enabled ? 'Broker FX rate' : 'Market FX rate'}} (${{b.instrument_currency}}/${{currency}})`, effectiveRate, 'positive', null, rateTitle));
     }}
-    if (Number.isFinite(Number(b.max_capital))) chips.push(calculationChip('◕', b.max_capital_is_avg10d ? 'Max capital (1% Avg10d)' : 'Max capital', money(b.max_capital, b.max_capital_currency || currency)));
-    if (data.fx_conversion_fee_applicable && !(b.instrument_currency && b.instrument_currency !== currency)) chips.push(calculationChip('↔', `FX conversion ${{numText(data.fx_conversion_fee_pct ?? 1, 1)}}%`, '0.5% buy + 0.5% sell', 'positive', data.fx_conversion_fee_enabled));
+    if (Number.isFinite(Number(b.max_capital))) chips.push(calculationChip('◕', b.max_capital_is_avg10d ? 'Max capital to engage (1% Avg10d)' : 'Max capital to engage', money(b.max_capital, b.max_capital_currency || currency)));
+    if (data.fx_conversion_fee_applicable) chips.push(calculationChip('↔', `FX conversion ${{numText(data.fx_conversion_fee_pct ?? 1, 1)}}% (2 × 0.5%)`, '', 'positive', data.fx_conversion_fee_enabled));
     chips.push(calculationChip('%', `Broker commission ${{numText(data.broker_commission_pct ?? 0.2, 2)}}%`, '', 'fee', data.broker_commission_enabled));
-    if (Number.isFinite(Number(b.lot_cost))) chips.push(calculationChip('◉', 'Lot cost', money(b.lot_cost, currency), 'fee'));
-    if (Number.isFinite(Number(b.spread))) chips.push(calculationChip('↔', 'Spread', numText(b.spread, 4)));
-    if (data.take_profit != null) chips.push(calculationChip('◇', 'Take profit', fmt(Number(data.take_profit)), 'positive'));
-    if (data.risk_reward != null) chips.push(calculationChip('⚖', 'Risk / reward', `${{numText(data.risk_reward, 2)}}:1`));
-    if (data.profit != null) chips.push(calculationChip('+', 'Projected profit', `${{money(data.profit, currency)}} (${{numText(data.profit_percent, 2)}}%)`, 'positive'));
     if (data.zr_ratio != null) chips.push(calculationChip('⌁', 'Additional Z/R', `${{numText(data.zr_ratio, 2)}}:1`));
     summary.innerHTML = chips.join('');
     table.innerHTML = `<table><thead><tr><th>Risk Level</th><th>Position Size</th><th>Engaged Capital</th><th>Potential Loss With Spread</th><th>Loss %</th></tr></thead><tbody>${{(data.rows||[]).map(r => `<tr><td>${{r.risk_label}}</td><td>${{numText(r.position_size, r.position_unit === 'Shares' ? 0 : 3)}} ${{r.position_unit}}</td><td>${{money(r.capital_used, currency)}}</td><td>${{money(r.potential_loss, currency)}}</td><td>${{numText(r.loss_percent, 2)}}%</td></tr>`).join('')}}</tbody></table>`;
