@@ -451,6 +451,18 @@ def test_position_drawer_does_not_grow_after_repeated_calculations():
     assert "drawer.getBoundingClientRect().height + 10" not in source
 
 
+def test_position_calculation_summary_uses_colored_semantic_cards():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert ".calc-chip {{" in source
+    assert ".calc-chip.positive" in source
+    assert ".calc-chip.danger" in source
+    assert "function calculationChip(icon, label, value, tone='', state=null, title='')" in source
+    assert "Position size (${{headlineRow.risk_label}} risk)" in source
+    assert "Broker commission ${{numText(data.broker_commission_pct ?? 0.2, 2)}}%" in source
+    assert "calc-chip-state ${{state ? 'on' : ''}}" in source
+
+
 def test_level_legend_is_updated_when_a_chart_value_changes():
     source = UI_SOURCE.read_text(encoding="utf-8")
     add_legend = source[source.index("const addLegend"):source.index("const resetLegend")]

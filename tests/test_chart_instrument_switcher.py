@@ -167,7 +167,7 @@ def test_position_calculation_displays_one_percent_avg10d_with_market_currency()
 
     assert "max_capital = avg_turnover_10d * 0.01 * instrument_to_calculation_rate" in source
     assert '"max_capital_currency": currency' in source
-    assert "Max capital to engage (1% Avg10d)" in source
+    assert "Max capital (1% Avg10d)" in source
     assert "money(b.max_capital, b.max_capital_currency || currency)" in source
 
 

@@ -716,23 +716,29 @@ class LightweightChartLevelSelectorUI:
     .main.calc-open #chart-wrap {{ height: calc(100vh - 210px - var(--calc-drawer-height, 340px)); min-height: 180px; cursor: grab; }}
     .main.calc-open #chart-wrap.dragging {{ cursor: grabbing; }}
     #calc-splitter {{ display:none; position:relative; z-index:90; height:22px; margin:0 10px; cursor:ns-resize; touch-action:none; }} #calc-splitter::before {{ content:''; display:block; position:absolute; left:0; right:0; top:10px; height:2px; border-radius:999px; background:#315b80; }} #calc-splitter::after {{ content:'↕'; display:grid; place-items:center; position:absolute; left:50%; top:1px; width:28px; height:20px; transform:translateX(-50%); border:0; background:#071426; color:#94a3b8; font:900 15px/1 sans-serif; }} #calc-splitter:hover::after,#calc-splitter.resizing::after {{ color:#e2e8f0; transform:translateX(-50%) scale(1.08); }} .main.calc-open #calc-splitter {{ display:block; }}
-    #calc-drawer {{ display:none; position:relative; margin-top:8px; max-height:46vh; overflow:auto; background:rgba(15,23,42,.97); border:1px solid #334155; border-radius:12px; box-shadow:0 18px 50px rgba(0,0,0,.45); padding:10px 12px; }}
+    #calc-drawer {{ display:none; position:relative; margin-top:8px; max-height:46vh; overflow:auto; background:linear-gradient(145deg,rgba(5,16,35,.99),rgba(10,24,45,.98)); border:1px solid #285170; border-radius:14px; box-shadow:0 18px 50px rgba(0,0,0,.45),inset 0 1px 0 rgba(148,163,184,.08); padding:12px 14px; }}
     #calc-drawer.open {{ display:block; margin-top:-6px; }}
     .main.calc-open #calc-drawer {{ box-sizing:border-box; height:var(--calc-drawer-height,340px); max-height:none; }}
-    .calc-toolbar {{ display:grid; grid-template-columns:minmax(180px,1fr) minmax(240px,1fr) auto auto; align-items:center; gap:12px; margin:0 0 10px; }}
-    #calc-title {{ margin:0; font-size:18px; }}
-    #calc-close {{ justify-self:end; }}
-    #calc-table {{ max-width: 980px; margin: 0 auto; }}
-    #calc-drawer table {{ width:auto; min-width:760px; max-width:980px; border-collapse:collapse; font-size:13px; }}
-    #calc-drawer th, #calc-drawer td {{ border:1px solid #334155; padding:4px 7px; text-align:right; white-space:nowrap; }}
+    .calc-toolbar {{ display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:14px; margin:0 0 12px; }}
+    #calc-title {{ margin:0; color:#f8fafc; font-size:18px; white-space:nowrap; }}
+    #calc-close {{ justify-self:end; min-height:34px; padding:6px 12px; border-color:#315779; background:#0d2038; color:#dbeafe; }}
+    #calc-table {{ max-width: 1080px; margin: 0 auto; overflow-x:auto; border-radius:10px; }}
+    #calc-drawer table {{ width:100%; min-width:760px; max-width:1080px; border-collapse:separate; border-spacing:0; font-size:13px; }}
+    #calc-drawer th, #calc-drawer td {{ border-right:1px solid #29415f; border-bottom:1px solid #29415f; padding:6px 9px; text-align:right; white-space:nowrap; }}
     #calc-drawer th:first-child, #calc-drawer td:first-child {{ text-align:left; }}
-    #calc-drawer th {{ background:#1e293b; color:#bfdbfe; position:sticky; top:0; }}
+    #calc-drawer th {{ background:#162942; color:#93c5fd; position:sticky; top:0; }}
     #calc-table.debug-report {{ max-width:none; }} #calc-table.debug-report > table {{ width:100%; max-width:none; table-layout:fixed; }} #calc-table.debug-report > table th,#calc-table.debug-report > table td {{ min-height:34px; padding:9px 12px; vertical-align:middle; white-space:normal; }} #calc-table.debug-report > table th:first-child,#calc-table.debug-report > table td:first-child {{ width:16%; }} #calc-table.debug-report > table th:not(:first-child),#calc-table.debug-report > table td:not(:first-child) {{ border-left:3px solid #294f73; text-align:center; }}
     .calc-toolbar.debug-instrument {{ position:relative; padding:10px 12px; border:1px solid #29415f; border-radius:9px; background:#071426; }} .debug-report-identity {{ display:none; min-width:0; text-align:center; }} .debug-instrument .debug-report-identity {{ display:block; position:absolute; left:50%; top:50%; width:min(34vw,440px); transform:translate(-50%,-50%); }} .debug-report-identity strong {{ display:block; color:#f8fafc; font-size:15px; }} .debug-report-identity span {{ display:block; margin-top:2px; color:#93c5fd; font-size:12px; }}
     .debug-data-section {{ margin-top:14px; padding:12px; border:1px solid #29415f; border-radius:10px; background:#071426; }} .debug-data-section h4 {{ margin:0 0 8px; color:#c4b5fd; }}
     .debug-data-section table {{ width:100% !important; min-width:680px !important; max-width:none !important; }}
-    #calc-summary {{ display:flex; flex-wrap:wrap; justify-content:flex-end; gap:5px 12px; margin-left:auto; color:#cbd5e1; font-size:13px; }}
-    #calc-summary b {{ color:#f8fafc; }}
+    #calc-summary {{ display:flex; align-items:stretch; gap:8px; min-width:0; overflow-x:auto; padding:1px 2px 4px; scrollbar-width:thin; }}
+    .calc-chip {{ flex:0 0 auto; min-width:112px; max-width:250px; display:grid; grid-template-columns:30px minmax(0,1fr); gap:8px; align-items:center; padding:8px 10px; border:1px solid #244766; border-radius:9px; background:linear-gradient(145deg,rgba(14,36,62,.94),rgba(7,24,44,.96)); box-shadow:inset 0 1px 0 rgba(148,163,184,.08); }}
+    .calc-chip-icon {{ display:grid; place-items:center; width:30px; height:30px; color:#60a5fa; font-size:21px; font-style:normal; }}
+    .calc-chip-copy {{ min-width:0; }} .calc-chip-label {{ display:block; color:#8fb4d4; font-size:11px; line-height:1.15; }} .calc-chip-value {{ display:block; margin-top:3px; color:#eef6ff; font-size:14px; font-weight:900; line-height:1.15; white-space:normal; }}
+    .calc-chip.positive .calc-chip-icon,.calc-chip.positive .calc-chip-value {{ color:#4ade80; }} .calc-chip.danger .calc-chip-icon,.calc-chip.danger .calc-chip-value {{ color:#fb7185; }} .calc-chip.fee .calc-chip-icon {{ color:#c084fc; }}
+    .calc-chip-state {{ display:inline-block; margin-left:5px; padding:1px 5px; border:1px solid #52677f; border-radius:4px; color:#94a3b8; font-size:10px; font-style:normal; }} .calc-chip-state.on {{ border-color:#22c55e; background:rgba(21,128,61,.24); color:#86efac; }}
+    .calc-summary-error {{ color:#fecaca; font-weight:800; }}
+    @media(max-width:900px) {{ .calc-toolbar {{ grid-template-columns:1fr auto; }} #calc-summary {{ grid-column:1/-1; grid-row:2; }} }}
     #calc-warnings {{ margin-top:6px; color:#facc15; font-size:12px; }}
     #wedge-debug-panel {{ display:none; margin-top:10px; padding:10px; border:1px solid #334155; border-radius:10px; background:#0f172a; color:#dbeafe; font-size:12px; line-height:1.35; max-height:42vh; overflow:auto; white-space:pre-wrap; }}
     #wedge-debug-panel.open {{ display:block; }}
@@ -4646,6 +4652,10 @@ class LightweightChartLevelSelectorUI:
     const n = Number(v || 0);
     return n.toLocaleString(undefined, {{minimumFractionDigits:digits, maximumFractionDigits:digits}});
   }}
+  function calculationChip(icon, label, value, tone='', state=null, title='') {{
+    const stateHtml = state == null ? '' : `<em class="calc-chip-state ${{state ? 'on' : ''}}">${{state ? 'ON' : 'OFF'}}</em>`;
+    return `<span class="calc-chip ${{tone}}"${{title ? ` title="${{title}}"` : ''}}><i class="calc-chip-icon">${{icon}}</i><span class="calc-chip-copy"><small class="calc-chip-label">${{label}}${{stateHtml}}</small><strong class="calc-chip-value">${{value}}</strong></span></span>`;
+  }}
   function renderCalculation(data) {{
     const drawer = $('calc-drawer'), summary = $('calc-summary'), table = $('calc-table'), warnings = $('calc-warnings');
     const wasOpen = drawer.classList.contains('open');
@@ -4658,36 +4668,34 @@ class LightweightChartLevelSelectorUI:
     $('calc-drawer').closest('.main')?.classList.add('calc-open');
     if (!data || !data.ok) {{
       const needsTradingDetails = !levels.__stock_cfd_mode__ && P.instrumentType !== 'stock';
-      summary.innerHTML = [
-        '<b>Unable to calculate position.</b>',
-        '<span><b>Data required for calculation:</b> entry price, stop loss, and current capital.</span>',
-        needsTradingDetails ? '<span>For Forex and commodities also provide lot cost and pip value.</span>' : '',
-        '<span>Check the data and try again.</span>'
-      ].filter(Boolean).join('');
+      summary.innerHTML = `<span class="calc-summary-error">Unable to calculate position. Select entry, stop loss and current capital.${{needsTradingDetails ? ' Forex and commodities also require lot cost and pip value.' : ''}}</span>`;
       table.innerHTML = ''; warnings.innerHTML = ''; return;
     }}
     const currency = data.currency || 'PLN';
     const b = data.basics || {{}};
     const chips = [];
-    chips.push(`<span><b>Instrument:</b> ${{data.instrument_type || P.instrumentType}}</span>`);
-    chips.push(`<span><b>Position:</b> ${{(data.position_type || $('position-type').value || 'long').toUpperCase()}}</span>`);
-    if (Number.isFinite(Number(b.entry))) chips.push(`<span><b>Entry:</b> ${{fmt(Number(b.entry))}}</span>`);
-    if (Number.isFinite(Number(b.stop_loss))) chips.push(`<span><b>Stop loss:</b> ${{fmt(Number(b.stop_loss))}}</span>`);
+    const position = (data.position_type || $('position-type').value || 'long').toUpperCase();
+    chips.push(calculationChip('▥', 'Instrument', data.instrument_type || P.instrumentType));
+    chips.push(calculationChip(position === 'LONG' ? '↑' : '↓', 'Position', position, position === 'LONG' ? 'positive' : 'danger'));
+    if (Number.isFinite(Number(b.entry))) chips.push(calculationChip('◎', 'Entry', fmt(Number(b.entry)), 'positive'));
+    if (Number.isFinite(Number(b.stop_loss))) chips.push(calculationChip('⬟', 'Stop loss', fmt(Number(b.stop_loss)), 'danger'));
+    const headlineRow = (data.rows || []).find(row => Math.abs(Number(row.risk) - 0.01) < 0.00001) || (data.rows || [])[0];
+    if (headlineRow) chips.push(calculationChip('▱', `Position size (${{headlineRow.risk_label}} risk)`, `${{numText(headlineRow.position_size, headlineRow.position_unit === 'Shares' ? 0 : 3)}} ${{headlineRow.position_unit}} · ${{money(headlineRow.capital_used, currency)}}`, 'fee'));
     if (b.instrument_currency && b.instrument_currency !== currency) {{
       const rateExplanation = data.fx_conversion_fee_enabled
         ? `${{numText(b.market_conversion_rate, 4)}} market × 1.01 (0.5% buy + 0.5% sell) = ${{numText(b.instrument_to_calculation_rate, 4)}}`
         : numText(b.instrument_to_calculation_rate, 4);
-      chips.push(`<span><b>${{data.fx_conversion_fee_enabled ? 'Broker FX rate' : 'Market FX rate'}}:</b> 1 ${{b.instrument_currency}} = ${{rateExplanation}} ${{currency}}</span>`);
+      chips.push(calculationChip('↔', data.fx_conversion_fee_enabled ? 'Broker FX rate' : 'Market FX rate', `1 ${{b.instrument_currency}} = ${{rateExplanation}} ${{currency}}`, 'positive', data.fx_conversion_fee_enabled, 'Current market rate with 0.5% purchase and 0.5% sale conversion when enabled'));
     }}
-    if (Number.isFinite(Number(b.max_capital))) chips.push(`<span><b>${{b.max_capital_is_avg10d ? 'Max capital to engage (1% Avg10d)' : 'Max capital to engage'}}:</b> ${{money(b.max_capital, b.max_capital_currency || currency)}}</span>`);
-    if (data.fx_conversion_fee_applicable) chips.push(`<span><b>FX conversion ${{numText(data.fx_conversion_fee_pct ?? 1, 1)}}% (2 × 0.5%):</b> ${{data.fx_conversion_fee_enabled ? 'ON' : 'OFF'}}</span>`);
-    chips.push(`<span><b>Broker commission ${{numText(data.broker_commission_pct ?? 0.2, 2)}}%:</b> ${{data.broker_commission_enabled ? 'ON' : 'OFF'}}</span>`);
-    if (Number.isFinite(Number(b.lot_cost))) chips.push(`<span><b>Lot cost:</b> ${{money(b.lot_cost, currency)}}</span>`);
-    if (Number.isFinite(Number(b.spread))) chips.push(`<span><b>Spread:</b> ${{numText(b.spread, 4)}}</span>`);
-    if (data.take_profit != null) chips.push(`<span><b>Take profit:</b> ${{fmt(Number(data.take_profit))}}</span>`);
-    if (data.risk_reward != null) chips.push(`<span><b>Risk/reward:</b> ${{numText(data.risk_reward, 2)}}:1</span>`);
-    if (data.profit != null) chips.push(`<span><b>Profit:</b> ${{money(data.profit, currency)}} (${{numText(data.profit_percent, 2)}}%)</span>`);
-    if (data.zr_ratio != null) chips.push(`<span><b>Additional Z/R:</b> ${{numText(data.zr_ratio, 2)}}:1</span>`);
+    if (Number.isFinite(Number(b.max_capital))) chips.push(calculationChip('◕', b.max_capital_is_avg10d ? 'Max capital (1% Avg10d)' : 'Max capital', money(b.max_capital, b.max_capital_currency || currency)));
+    if (data.fx_conversion_fee_applicable && !(b.instrument_currency && b.instrument_currency !== currency)) chips.push(calculationChip('↔', `FX conversion ${{numText(data.fx_conversion_fee_pct ?? 1, 1)}}%`, '0.5% buy + 0.5% sell', 'positive', data.fx_conversion_fee_enabled));
+    chips.push(calculationChip('%', `Broker commission ${{numText(data.broker_commission_pct ?? 0.2, 2)}}%`, data.broker_commission_enabled ? 'Included' : 'Not included', 'fee', data.broker_commission_enabled));
+    if (Number.isFinite(Number(b.lot_cost))) chips.push(calculationChip('◉', 'Lot cost', money(b.lot_cost, currency), 'fee'));
+    if (Number.isFinite(Number(b.spread))) chips.push(calculationChip('↔', 'Spread', numText(b.spread, 4)));
+    if (data.take_profit != null) chips.push(calculationChip('◇', 'Take profit', fmt(Number(data.take_profit)), 'positive'));
+    if (data.risk_reward != null) chips.push(calculationChip('⚖', 'Risk / reward', `${{numText(data.risk_reward, 2)}}:1`));
+    if (data.profit != null) chips.push(calculationChip('+', 'Projected profit', `${{money(data.profit, currency)}} (${{numText(data.profit_percent, 2)}}%)`, 'positive'));
+    if (data.zr_ratio != null) chips.push(calculationChip('⌁', 'Additional Z/R', `${{numText(data.zr_ratio, 2)}}:1`));
     summary.innerHTML = chips.join('');
     table.innerHTML = `<table><thead><tr><th>Risk Level</th><th>Position Size</th><th>Engaged Capital</th><th>Potential Loss With Spread</th><th>Loss %</th></tr></thead><tbody>${{(data.rows||[]).map(r => `<tr><td>${{r.risk_label}}</td><td>${{numText(r.position_size, r.position_unit === 'Shares' ? 0 : 3)}} ${{r.position_unit}}</td><td>${{money(r.capital_used, currency)}}</td><td>${{money(r.potential_loss, currency)}}</td><td>${{numText(r.loss_percent, 2)}}%</td></tr>`).join('')}}</tbody></table>`;
     warnings.innerHTML = (data.warnings || []).map(w => `<div>⚠️ ${{w}}</div>`).join('');
