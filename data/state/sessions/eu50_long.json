@@ -1,10 +1,16 @@
 {
-  "__show_ichimoku__": false,
-  "__journal_source_technique__": "Fibo",
+  "__show_ichimoku__": true,
+  "__journal_source_technique__": "Ichimoku",
   "drawn_objects": [],
   "lot_cost": 12273.0,
   "pip_value": 43.0,
   "spread_multiplier": 2.8,
   "spread": 120.4,
-  "__saved_fibo_by_user__": false
+  "__saved_fibo_by_user__": false,
+  "__scanner_breakout_date__": "2026-09-14",
+  "__scanner_breakout_direction__": "short",
+  "__scanner_retest_count__": "2",
+  "__scanner_latest_retest_date__": "2026-09-25",
+  "__scanner_latest_retest_pattern__": "bearish_hammer",
+  "__scanner_previous_respect_months__": "5.0"
 }

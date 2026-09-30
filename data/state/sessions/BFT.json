@@ -9,7 +9,7 @@
   "apply_currency_conversion_fee": false,
   "currency_conversion_fee_pct": 0.01,
   "__currency_fee_eligible__": false,
-  "__show_ichimoku__": false,
+  "__show_ichimoku__": true,
   "__journal_source_technique__": "Fibo",
   "drawn_objects": [
     {
@@ -17,10 +17,23 @@
       "type": "fib",
       "label": "FIB 0% (5587.04)",
       "x0": "2026-08-14",
-      "x1": "2034-08-10",
+      "x1": "2034-08-13",
       "y0": 5587.04,
       "y1": 5587.04,
       "price": 5587.04,
+      "color": "#64748b",
+      "group_id": "auto-fibo",
+      "direction": "long"
+    },
+    {
+      "id": "auto-fibo-236",
+      "type": "fib",
+      "label": "FIB 23.6% (5024.43016)",
+      "x0": "2026-07-13",
+      "x1": "2034-08-13",
+      "y0": 5024.43016,
+      "y1": 5024.43016,
+      "price": 5024.43016,
       "color": "#64748b",
       "group_id": "auto-fibo",
       "direction": "long"
@@ -30,7 +43,7 @@
       "type": "fib",
       "label": "FIB 38.2% (4676.37492)",
       "x0": "2026-06-23",
-      "x1": "2034-08-10",
+      "x1": "2034-08-13",
       "y0": 4676.37492,
       "y1": 4676.37492,
       "price": 4676.37492,
@@ -43,7 +56,7 @@
       "type": "fib",
       "label": "FIB 50% (4395.07)",
       "x0": "2026-06-05",
-      "x1": "2034-08-10",
+      "x1": "2034-08-13",
       "y0": 4395.07,
       "y1": 4395.07,
       "price": 4395.07,
@@ -56,7 +69,7 @@
       "type": "fib",
       "label": "FIB 61.8% (4113.76508)",
       "x0": "2026-05-19",
-      "x1": "2034-08-10",
+      "x1": "2034-08-13",
       "y0": 4113.76508,
       "y1": 4113.76508,
       "price": 4113.76508,
@@ -69,7 +82,7 @@
       "type": "fib",
       "label": "FIB 100% (3203.1)",
       "x0": "2026-03-23",
-      "x1": "2034-08-10",
+      "x1": "2034-08-13",
       "y0": 3203.1,
       "y1": 3203.1,
       "price": 3203.1,
@@ -89,5 +102,9 @@
       "group_id": "auto-fibo"
     }
   ],
-  "__saved_fibo_by_user__": false
+  "__saved_fibo_by_user__": false,
+  "__scanner_breakout_date__": "2026-09-15",
+  "__scanner_breakout_direction__": "short",
+  "__scanner_retest_count__": "0",
+  "__scanner_previous_respect_months__": "5.1"
 }

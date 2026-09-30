@@ -1,6 +1,6 @@
 {
-  "__show_ichimoku__": true,
-  "__journal_source_technique__": "Ichimoku",
+  "__show_ichimoku__": false,
+  "__journal_source_technique__": "Kliny",
   "lot_cost": 85171.26,
   "pip_value": 361.86,
   "drawn_objects": [
@@ -11,17 +11,17 @@
       "x": [
         "2026-01-29",
         "2026-08-25",
-        "2026-10-23"
+        "2026-11-09"
       ],
       "y": [
         5595.435,
         4696.275,
-        4435.03257
+        4368.20311
       ],
       "x0": "2026-01-29",
-      "x1": "2026-10-23",
+      "x1": "2026-11-09",
       "y0": 5595.435,
-      "y1": 4435.03257,
+      "y1": 4368.20311,
       "anchor_x": [
         "2026-01-29",
         "2026-08-25"
@@ -30,7 +30,7 @@
         5595.435,
         4696.275
       ],
-      "price": 4435.03257,
+      "price": 4368.20311,
       "color": "#dc2626",
       "group_id": "auto-wedge",
       "free_extension": false
@@ -40,29 +40,31 @@
       "type": "wedge",
       "label": "Falling wedge lower",
       "x": [
-        "2026-07-29",
-        "2026-11-24"
+        "2026-08-14",
+        "2026-09-02",
+        "2026-11-09"
       ],
       "y": [
-        3996.09,
-        4773.43
+        4311.095,
+        4283.03,
+        4179.40538
       ],
       "x0": "2026-08-14",
-      "x1": "2026-10-23",
+      "x1": "2026-11-09",
       "y0": 4311.095,
-      "y1": 4203.15269,
+      "y1": 4179.40538,
       "anchor_x": [
-        "2026-07-29",
+        "2026-08-14",
         "2026-09-02"
       ],
       "anchor_y": [
-        3996.09,
+        4311.095,
         4283.03
       ],
-      "price": 4203.15269,
+      "price": 4179.40538,
       "color": "#2563eb",
       "group_id": "auto-wedge",
-      "free_extension": true
+      "free_extension": false
     }
   ],
   "high": 5595.44,
@@ -91,11 +93,5 @@
   },
   "__half_points__": [],
   "__saved_fibo_by_user__": false,
-  "__saved_wedge_by_user__": true,
-  "__scanner_breakout_date__": "2026-08-10",
-  "__scanner_breakout_direction__": "long",
-  "__scanner_retest_count__": "1",
-  "__scanner_latest_retest_date__": "2026-08-14",
-  "__scanner_latest_retest_pattern__": "bullish_harami",
-  "__scanner_previous_respect_months__": "4.8"
+  "__saved_wedge_by_user__": false
 }

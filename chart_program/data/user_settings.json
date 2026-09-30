@@ -1,9 +1,14 @@
 {
-  "current_balance": 304000.0,
-  "favorite_instruments": [],
+  "current_balance": 285000.0,
+  "favorite_instruments": [
+    "ADBE.US",
+    "BEI.DE",
+    "DASH.US",
+    "XAGUSD"
+  ],
   "chart_sidebar_collapsed": {
     "manual-card": false,
-    "instrument-card": true,
+    "instrument-card": false,
     "selected-card": false
   }
 }
