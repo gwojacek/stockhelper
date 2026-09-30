@@ -689,7 +689,6 @@ class LightweightChartLevelSelectorUI:
     #currency-fee-toggle::before,#broker-fee-toggle::before {{ content:''; position:absolute; right:31px; top:50%; transform:translateY(-50%); width:18px; height:18px; border-radius:50%; background:#cbd5e1; z-index:1; box-shadow:0 2px 8px rgba(0,0,0,.45); transition:right .18s ease, background .18s ease; }}
     #currency-fee-toggle.active::after,#broker-fee-toggle.active::after {{ background:linear-gradient(90deg,#2563eb,#60a5fa); box-shadow:0 0 18px rgba(96,165,250,.35); }}
     #currency-fee-toggle.active::before,#broker-fee-toggle.active::before {{ right:15px; background:#fff; }}
-    #fx-rate-help {{ display:none;margin:6px 2px 0;color:#94a3b8;font-size:11px;line-height:1.35; }}
     .broker-fee-row {{ display:grid;grid-template-columns:1fr 82px;gap:8px;align-items:center;margin-top:8px; }}
     #broker-fee-pct {{ min-width:0;text-align:center;padding:10px 6px; }}
     #result-box {{ margin-top:12px; padding:14px; border:1px solid rgba(34,197,94,.45); border-radius:16px; background:linear-gradient(135deg,rgba(6,78,59,.45),rgba(2,6,23,.65)); color:#d1fae5; font-weight:800; overflow-wrap:anywhere; }}
@@ -708,7 +707,7 @@ class LightweightChartLevelSelectorUI:
     #journal-notes {{ min-height:170px; resize:vertical; }}
     #journal-preview {{ display:none; white-space:pre-wrap;background:rgba(2,6,23,.76);border:1px solid #334155;border-radius:14px;padding:10px;margin-top:10px;color:#dbeafe;font-size:12px;max-height:170px;overflow:auto; }}
     #journal-panel.show-preview #journal-preview {{ display:block; }}
-    .manual-card.journal-open > .side-card-body > label,.manual-card.journal-open > .side-card-body > input,.manual-card.journal-open > .side-card-body > select,.manual-card.journal-open > .side-card-body > #calculation-currency-buttons,.manual-card.journal-open > .side-card-body > #currency-fee-toggle,.manual-card.journal-open > .side-card-body > #fx-rate-help,.manual-card.journal-open > .side-card-body > .broker-fee-row,.manual-card.journal-open > .side-card-body > #object-picker,.manual-card.journal-open > .side-card-body > #delete-object,.manual-card.journal-open > .side-card-body > #calculate-btn,.manual-card.journal-open > .side-card-body > .action-grid,.manual-card.journal-open > .side-card-body > #wedge-debug-panel {{ display:none !important; }}
+    .manual-card.journal-open > .side-card-body > label,.manual-card.journal-open > .side-card-body > input,.manual-card.journal-open > .side-card-body > select,.manual-card.journal-open > .side-card-body > #calculation-currency-buttons,.manual-card.journal-open > .side-card-body > #currency-fee-toggle,.manual-card.journal-open > .side-card-body > .broker-fee-row,.manual-card.journal-open > .side-card-body > #object-picker,.manual-card.journal-open > .side-card-body > #delete-object,.manual-card.journal-open > .side-card-body > #calculate-btn,.manual-card.journal-open > .side-card-body > .action-grid,.manual-card.journal-open > .side-card-body > #wedge-debug-panel {{ display:none !important; }}
     .manual-card.journal-open #journal-panel {{ margin-top:0; padding:16px; min-height:520px; }}
     #journal-close-panel {{ width:auto;margin-left:auto;padding:6px 10px;border-radius:999px;background:#1e293b;border:1px solid #475569;color:#dbeafe;font-size:12px; }}
     .fib-label-contrast {{ color: #f8fafc; text-shadow: 0 1px 2px rgba(0,0,0,.65); }}
@@ -732,10 +731,11 @@ class LightweightChartLevelSelectorUI:
     .debug-data-section {{ margin-top:14px; padding:12px; border:1px solid #29415f; border-radius:10px; background:#071426; }} .debug-data-section h4 {{ margin:0 0 8px; color:#c4b5fd; }}
     .debug-data-section table {{ width:100% !important; min-width:680px !important; max-width:none !important; }}
     #calc-summary {{ display:flex; align-items:stretch; gap:8px; min-width:0; overflow-x:auto; padding:1px 2px 4px; scrollbar-width:thin; }}
-    .calc-chip {{ flex:0 0 auto; min-width:112px; max-width:250px; display:grid; grid-template-columns:30px minmax(0,1fr); gap:8px; align-items:center; padding:8px 10px; border:1px solid #244766; border-radius:9px; background:linear-gradient(145deg,rgba(14,36,62,.94),rgba(7,24,44,.96)); box-shadow:inset 0 1px 0 rgba(148,163,184,.08); }}
-    .calc-chip-icon {{ display:grid; place-items:center; width:30px; height:30px; color:#60a5fa; font-size:21px; font-style:normal; }}
+    .calc-chip {{ flex:0 0 auto; min-width:92px; max-width:190px; display:grid; grid-template-columns:24px minmax(0,1fr); gap:6px; align-items:center; padding:7px 8px; border:1px solid #244766; border-radius:9px; background:linear-gradient(145deg,rgba(14,36,62,.94),rgba(7,24,44,.96)); box-shadow:inset 0 1px 0 rgba(148,163,184,.08); }}
+    .calc-chip-position-size-1-0-risk {{ min-width:185px; }} .calc-chip-broker-fx-rate,.calc-chip-market-fx-rate {{ min-width:145px; }} .calc-chip-max-capital-1-avg10d {{ min-width:165px; }}
+    .calc-chip-icon {{ display:grid; place-items:center; width:24px; height:28px; color:#60a5fa; font-size:20px; font-style:normal; }}
     .calc-chip-copy {{ min-width:0; }} .calc-chip-label {{ display:block; color:#8fb4d4; font-size:11px; line-height:1.15; }} .calc-chip-value {{ display:block; margin-top:3px; color:#eef6ff; font-size:14px; font-weight:900; line-height:1.15; white-space:normal; }}
-    .calc-chip.positive .calc-chip-icon,.calc-chip.positive .calc-chip-value {{ color:#4ade80; }} .calc-chip.danger .calc-chip-icon,.calc-chip.danger .calc-chip-value {{ color:#fb7185; }} .calc-chip.fee .calc-chip-icon {{ color:#c084fc; }}
+    .calc-chip.positive .calc-chip-icon {{ color:#4ade80; }} .calc-chip.danger .calc-chip-icon {{ color:#fb7185; }} .calc-chip.fee .calc-chip-icon {{ color:#c084fc; }}
     .calc-chip-state {{ display:inline-block; margin-left:5px; padding:1px 5px; border:1px solid #52677f; border-radius:4px; color:#94a3b8; font-size:10px; font-style:normal; }} .calc-chip-state.on {{ border-color:#22c55e; background:rgba(21,128,61,.24); color:#86efac; }}
     .calc-summary-error {{ color:#fecaca; font-weight:800; }}
     @media(max-width:900px) {{ .calc-toolbar {{ grid-template-columns:1fr auto; }} #calc-summary {{ grid-column:1/-1; grid-row:2; }} }}
@@ -826,7 +826,6 @@ class LightweightChartLevelSelectorUI:
         <label>Calculation currency</label><div id="calculation-currency-buttons"><button type="button" data-currency="PLN">PLN</button><button type="button" data-currency="USD">USD</button><button type="button" data-currency="EUR">EUR</button><button type="button" data-currency="GBP">GBP</button></div><input id="calculation-currency" type="hidden" value="PLN" />
         <div id="max-capital-info" style="display:none;margin-top:8px;padding:10px 12px;border:1px solid #334155;border-radius:10px;background:#0f172a;color:#cbd5e1;font-size:12px"></div>
         <button id="currency-fee-toggle" style="margin-top:8px;width:100%;display:none"></button>
-        <div id="fx-rate-help">Effective broker rate = current market rate × 1.01: 0.5% conversion on purchase + 0.5% conversion on sale.</div>
         <div class="broker-fee-row"><button id="broker-fee-toggle" type="button"></button><input id="broker-fee-pct" type="number" min="0" step="0.01" value="0.2" title="Broker commission percent charged on entry and exit" /></div>
         <label id="lot-cost-label">Lot cost</label><input id="lot-cost" type="number" />
         <label id="pip-value-label">Pip value</label><input id="pip-value" type="number" />
@@ -862,6 +861,7 @@ class LightweightChartLevelSelectorUI:
   const seq = P.selectionSequence;
   const labels = P.labels;
   let levels = {{...(P.values || {{}})}};
+  let calculationRequestId = 0;
   let levelPoints = {{...(levels.level_points || {{}})}};
   const deepClone = (value) => JSON.parse(JSON.stringify(value));
   const isScannerDrawnObject = (obj) => !!obj && (obj.group_id === 'auto-wedge' || obj.group_id === 'auto-fibo' || obj.type === 'wedge' || obj.scanner === true || obj.source === 'scanner');
@@ -3853,8 +3853,8 @@ class LightweightChartLevelSelectorUI:
     setFieldState('pip-value', disabled || stockCfdOn, !disabled && !stockCfdOn);
     $('spread-mult-label').textContent = stockCfdOn ? 'Spread (price units; pips = spread / 0.01)' : 'Spread multiplier (spread = Multiplier * pip_value)';
     $('currency-fee-toggle').style.display = feeEligible ? 'block' : 'none';
-    $('fx-rate-help').style.display = feeEligible ? 'block' : 'none';
     $('currency-fee-toggle').textContent = `FX conversion 1% (2 × 0.5%): ${{levels.apply_currency_conversion_fee ? 'ON' : 'OFF'}}`;
+    $('currency-fee-toggle').title = 'Effective broker rate = current market rate × 1.01: 0.5% conversion on purchase + 0.5% conversion on sale.';
     $('currency-fee-toggle').classList.toggle('active', !!levels.apply_currency_conversion_fee);
     const brokerFeeInput = $('broker-fee-pct')?.value;
     const brokerFeePct = brokerFeeInput !== '' && Number.isFinite(Number(brokerFeeInput))
@@ -4617,6 +4617,12 @@ class LightweightChartLevelSelectorUI:
 
   function collectLevelsForSave(finished=false) {{
     const stockCfdMode = !!levels.__stock_cfd_mode__;
+    const selectedLevelValue = field => {{
+      const pointValue = Number(levelPoints[field]?.price);
+      if (Number.isFinite(pointValue) && pointValue > 0) return pointValue;
+      const levelValue = Number(levels[field]);
+      return Number.isFinite(levelValue) ? levelValue : 0;
+    }};
     const pipValue = stockCfdMode ? 1 : Number($('pip-value').value || 0);
     const spreadMult = Number($('spread-mult').value || 0);
     const currentFiboGeometry = JSON.stringify(drawnObjects.filter(obj => obj.type === 'fib' || obj.type === 'fib-boundary'));
@@ -4632,6 +4638,12 @@ class LightweightChartLevelSelectorUI:
       position_type:$('position-type').value,
       capital:roundPrice(Number($('capital').value || 255000)),
       calculation_currency:String($('calculation-currency').value || 'PLN').toUpperCase(),
+      entry:selectedLevelValue('entry'),
+      stop_loss:selectedLevelValue('stop_loss'),
+      high:selectedLevelValue('high'),
+      low:selectedLevelValue('low'),
+      check_zr_value_fibo_or_elevation:selectedLevelValue('check_zr_value_fibo_or_elevation'),
+      line_cross_value:selectedLevelValue('line_cross_value'),
       apply_broker_commission:!!levels.apply_broker_commission,
       broker_commission_pct:$('broker-fee-pct').value !== '' && Number.isFinite(Number($('broker-fee-pct').value)) ? Math.max(0,Number($('broker-fee-pct').value)) : 0.2,
       lot_cost:roundPrice(Number($('lot-cost').value || 0)),
@@ -4653,8 +4665,9 @@ class LightweightChartLevelSelectorUI:
     return n.toLocaleString(undefined, {{minimumFractionDigits:digits, maximumFractionDigits:digits}});
   }}
   function calculationChip(icon, label, value, tone='', state=null, title='') {{
+    const kind = String(label || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const stateHtml = state == null ? '' : `<em class="calc-chip-state ${{state ? 'on' : ''}}">${{state ? 'ON' : 'OFF'}}</em>`;
-    return `<span class="calc-chip ${{tone}}"${{title ? ` title="${{title}}"` : ''}}><i class="calc-chip-icon">${{icon}}</i><span class="calc-chip-copy"><small class="calc-chip-label">${{label}}${{stateHtml}}</small><strong class="calc-chip-value">${{value}}</strong></span></span>`;
+    return `<span class="calc-chip calc-chip-${{kind}} ${{tone}}"${{title ? ` title="${{title}}"` : ''}}><i class="calc-chip-icon">${{icon}}</i><span class="calc-chip-copy"><small class="calc-chip-label">${{label}}${{stateHtml}}</small>${{value ? `<strong class="calc-chip-value">${{value}}</strong>` : ''}}</span></span>`;
   }}
   function renderCalculation(data) {{
     const drawer = $('calc-drawer'), summary = $('calc-summary'), table = $('calc-table'), warnings = $('calc-warnings');
@@ -4682,14 +4695,13 @@ class LightweightChartLevelSelectorUI:
     const headlineRow = (data.rows || []).find(row => Math.abs(Number(row.risk) - 0.01) < 0.00001) || (data.rows || [])[0];
     if (headlineRow) chips.push(calculationChip('▱', `Position size (${{headlineRow.risk_label}} risk)`, `${{numText(headlineRow.position_size, headlineRow.position_unit === 'Shares' ? 0 : 3)}} ${{headlineRow.position_unit}} · ${{money(headlineRow.capital_used, currency)}}`, 'fee'));
     if (b.instrument_currency && b.instrument_currency !== currency) {{
-      const rateExplanation = data.fx_conversion_fee_enabled
-        ? `${{numText(b.market_conversion_rate, 4)}} market × 1.01 (0.5% buy + 0.5% sell) = ${{numText(b.instrument_to_calculation_rate, 4)}}`
-        : numText(b.instrument_to_calculation_rate, 4);
-      chips.push(calculationChip('↔', data.fx_conversion_fee_enabled ? 'Broker FX rate' : 'Market FX rate', `1 ${{b.instrument_currency}} = ${{rateExplanation}} ${{currency}}`, 'positive', data.fx_conversion_fee_enabled, 'Current market rate with 0.5% purchase and 0.5% sale conversion when enabled'));
+      const effectiveRate = `${{numText(b.instrument_to_calculation_rate, 4)}} ${{currency}}`;
+      const rateTitle = data.fx_conversion_fee_enabled ? `${{numText(b.market_conversion_rate, 4)}} market × 1.01 (0.5% buy + 0.5% sell) = ${{effectiveRate}}` : `Current market rate: ${{effectiveRate}}`;
+      chips.push(calculationChip('↔', data.fx_conversion_fee_enabled ? 'Broker FX rate' : 'Market FX rate', effectiveRate, 'positive', data.fx_conversion_fee_enabled, rateTitle));
     }}
     if (Number.isFinite(Number(b.max_capital))) chips.push(calculationChip('◕', b.max_capital_is_avg10d ? 'Max capital (1% Avg10d)' : 'Max capital', money(b.max_capital, b.max_capital_currency || currency)));
     if (data.fx_conversion_fee_applicable && !(b.instrument_currency && b.instrument_currency !== currency)) chips.push(calculationChip('↔', `FX conversion ${{numText(data.fx_conversion_fee_pct ?? 1, 1)}}%`, '0.5% buy + 0.5% sell', 'positive', data.fx_conversion_fee_enabled));
-    chips.push(calculationChip('%', `Broker commission ${{numText(data.broker_commission_pct ?? 0.2, 2)}}%`, data.broker_commission_enabled ? 'Included' : 'Not included', 'fee', data.broker_commission_enabled));
+    chips.push(calculationChip('%', `Broker commission ${{numText(data.broker_commission_pct ?? 0.2, 2)}}%`, '', 'fee', data.broker_commission_enabled));
     if (Number.isFinite(Number(b.lot_cost))) chips.push(calculationChip('◉', 'Lot cost', money(b.lot_cost, currency), 'fee'));
     if (Number.isFinite(Number(b.spread))) chips.push(calculationChip('↔', 'Spread', numText(b.spread, 4)));
     if (data.take_profit != null) chips.push(calculationChip('◇', 'Take profit', fmt(Number(data.take_profit)), 'positive'));
@@ -4704,14 +4716,17 @@ class LightweightChartLevelSelectorUI:
   }}
   async function calculatePosition(show=true) {{
     const current = collectLevelsForSave(false);
+    const requestId = ++calculationRequestId;
     try {{
       const resp = await fetch('/calculate', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{levels:current}})}});
       const data = await resp.json();
+      if (requestId !== calculationRequestId) return data;
       if (data && data.ok) levels = {{...levels, position_calculations:data}};
       if (show) renderCalculation(data);
       return data;
     }} catch(e) {{
       const data = {{ok:false, error:String(e)}};
+      if (requestId !== calculationRequestId) return data;
       if (show) renderCalculation(data);
       return data;
     }}

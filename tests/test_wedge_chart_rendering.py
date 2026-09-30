@@ -461,6 +461,20 @@ def test_position_calculation_summary_uses_colored_semantic_cards():
     assert "Position size (${{headlineRow.risk_label}} risk)" in source
     assert "Broker commission ${{numText(data.broker_commission_pct ?? 0.2, 2)}}%" in source
     assert "calc-chip-state ${{state ? 'on' : ''}}" in source
+    assert ".calc-chip.positive .calc-chip-icon" in source
+    assert ".calc-chip.positive .calc-chip-value" not in source
+    assert "data.broker_commission_enabled ? 'Included' : 'Not included'" not in source
+    assert "const effectiveRate = `${{numText(b.instrument_to_calculation_rate, 4)}} ${{currency}}`" in source
+
+
+def test_fx_toggle_recalculation_keeps_selected_chart_levels_and_latest_request():
+    source = UI_SOURCE.read_text(encoding="utf-8")
+
+    assert "const selectedLevelValue = field =>" in source
+    assert "entry:selectedLevelValue('entry')" in source
+    assert "stop_loss:selectedLevelValue('stop_loss')" in source
+    assert "const requestId = ++calculationRequestId" in source
+    assert "if (requestId !== calculationRequestId) return data;" in source
 
 
 def test_level_legend_is_updated_when_a_chart_value_changes():
