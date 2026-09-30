@@ -4699,7 +4699,11 @@ class LightweightChartLevelSelectorUI:
     if (Number.isFinite(Number(b.max_capital))) chips.push(calculationChip('◕', b.max_capital_is_avg10d ? 'Max capital to engage (1% Avg10d)' : 'Max capital to engage', money(b.max_capital, b.max_capital_currency || currency)));
     if (data.fx_conversion_fee_applicable) chips.push(calculationChip('↔', `FX conversion ${{numText(data.fx_conversion_fee_pct ?? 1, 1)}}% (2 × 0.5%)`, '', 'positive', data.fx_conversion_fee_enabled));
     chips.push(calculationChip('%', `Broker commission ${{numText(data.broker_commission_pct ?? 0.2, 2)}}%`, '', 'fee', data.broker_commission_enabled));
-    if (data.zr_ratio != null) chips.push(calculationChip('⌁', 'Additional Z/R', `${{numText(data.zr_ratio, 2)}}:1`));
+    const wedgeCalculation = drawnObjects.some(isWedgeLineObject);
+    if (wedgeCalculation && data.risk_reward != null) chips.push(calculationChip('⚖', 'Risk / reward', `${{numText(data.risk_reward, 2)}}:1`));
+    if (wedgeCalculation && data.profit != null) chips.push(calculationChip('+', 'Projected profit', `${{money(data.profit, currency)}} (${{numText(data.profit_percent, 2)}}%)`, 'positive'));
+    const userMarkedZr = !!levelPoints.check_zr_value_fibo_or_elevation && !levelPoints.check_zr_value_fibo_or_elevation.auto_wedge;
+    if (userMarkedZr && data.zr_ratio != null) chips.push(calculationChip('⌁', 'Additional Z/R', `${{numText(data.zr_ratio, 2)}}:1`));
     summary.innerHTML = chips.join('');
     table.innerHTML = `<table><thead><tr><th>Risk Level</th><th>Position Size</th><th>Engaged Capital</th><th>Potential Loss With Spread</th><th>Loss %</th></tr></thead><tbody>${{(data.rows||[]).map(r => `<tr><td>${{r.risk_label}}</td><td>${{numText(r.position_size, r.position_unit === 'Shares' ? 0 : 3)}} ${{r.position_unit}}</td><td>${{money(r.capital_used, currency)}}</td><td>${{money(r.potential_loss, currency)}}</td><td>${{numText(r.loss_percent, 2)}}%</td></tr>`).join('')}}</tbody></table>`;
     warnings.innerHTML = (data.warnings || []).map(w => `<div>⚠️ ${{w}}</div>`).join('');

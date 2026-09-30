@@ -469,6 +469,11 @@ def test_position_calculation_summary_uses_colored_semantic_cards():
     assert "Max capital to engage (1% Avg10d)" in source
     assert "FX conversion ${{numText(data.fx_conversion_fee_pct ?? 1, 1)}}% (2 × 0.5%)" in source
     assert "Additional Z/R" in source
+    assert "const wedgeCalculation = drawnObjects.some(isWedgeLineObject)" in source
+    assert "wedgeCalculation && data.risk_reward != null" in source
+    assert "wedgeCalculation && data.profit != null" in source
+    assert "const userMarkedZr = !!levelPoints.check_zr_value_fibo_or_elevation" in source
+    assert "userMarkedZr && data.zr_ratio != null" in source
 
 
 def test_fx_toggle_recalculation_keeps_selected_chart_levels_and_latest_request():
