@@ -733,9 +733,9 @@ class LightweightChartLevelSelectorUI:
     #calc-summary {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(108px,1fr)); align-items:stretch; gap:8px; width:100%; min-width:0; padding:1px 2px 4px; }}
     .calc-chip {{ min-width:0; display:grid; grid-template-columns:24px minmax(0,1fr); gap:6px; align-items:center; padding:7px 8px; border:1px solid #244766; border-radius:9px; background:linear-gradient(145deg,rgba(14,36,62,.94),rgba(7,24,44,.96)); box-shadow:inset 0 1px 0 rgba(148,163,184,.08); }}
     .calc-chip-icon {{ display:grid; place-items:center; width:24px; height:28px; color:#60a5fa; font-size:20px; font-style:normal; }}
-    .calc-chip-copy {{ min-width:0; }} .calc-chip-label {{ display:block; color:#8fb4d4; font-size:11px; line-height:1.15; }} .calc-chip-value {{ display:block; margin-top:3px; color:#eef6ff; font-size:14px; font-weight:900; line-height:1.15; white-space:normal; }}
+    .calc-chip-copy {{ position:relative; min-width:0; }} .calc-chip-label {{ display:block; min-height:25px; color:#8fb4d4; font-size:11px; line-height:1.15; }} .calc-chip.has-state .calc-chip-label {{ padding-right:32px; }} .calc-chip-value {{ display:block; min-height:16px; margin-top:3px; color:#eef6ff; font-size:14px; font-weight:900; line-height:1.15; white-space:normal; }}
     .calc-chip.positive .calc-chip-icon {{ color:#4ade80; }} .calc-chip.danger .calc-chip-icon {{ color:#fb7185; }} .calc-chip.fee .calc-chip-icon {{ color:#c084fc; }}
-    .calc-chip-state {{ display:inline-block; margin-left:5px; padding:1px 5px; border:1px solid #52677f; border-radius:4px; color:#94a3b8; font-size:10px; font-style:normal; }} .calc-chip-state.on {{ border-color:#22c55e; background:rgba(21,128,61,.24); color:#86efac; }}
+    .calc-chip-state {{ position:absolute; right:0; top:0; display:inline-block; padding:1px 5px; border:1px solid #52677f; border-radius:4px; color:#94a3b8; font-size:10px; font-style:normal; }} .calc-chip-state.on {{ border-color:#22c55e; background:rgba(21,128,61,.24); color:#86efac; }}
     .calc-summary-error {{ color:#fecaca; font-weight:800; }}
     @media(max-width:1100px) {{ .calc-toolbar {{ grid-template-columns:1fr auto; }} #calc-summary {{ grid-column:1/-1; grid-row:2; grid-template-columns:repeat(auto-fit,minmax(135px,1fr)); }} }}
     #calc-warnings {{ margin-top:6px; color:#facc15; font-size:12px; }}
@@ -4666,7 +4666,7 @@ class LightweightChartLevelSelectorUI:
   function calculationChip(icon, label, value, tone='', state=null, title='') {{
     const kind = String(label || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const stateHtml = state == null ? '' : `<em class="calc-chip-state ${{state ? 'on' : ''}}">${{state ? 'ON' : 'OFF'}}</em>`;
-    return `<span class="calc-chip calc-chip-${{kind}} ${{tone}}"${{title ? ` title="${{title}}"` : ''}}><i class="calc-chip-icon">${{icon}}</i><span class="calc-chip-copy"><small class="calc-chip-label">${{label}}${{stateHtml}}</small>${{value ? `<strong class="calc-chip-value">${{value}}</strong>` : ''}}</span></span>`;
+    return `<span class="calc-chip calc-chip-${{kind}} ${{tone}} ${{state == null ? '' : 'has-state'}}"${{title ? ` title="${{title}}"` : ''}}><i class="calc-chip-icon">${{icon}}</i><span class="calc-chip-copy"><small class="calc-chip-label">${{label}}${{stateHtml}}</small><strong class="calc-chip-value">${{value || '&nbsp;'}}</strong></span></span>`;
   }}
   function renderCalculation(data) {{
     const drawer = $('calc-drawer'), summary = $('calc-summary'), table = $('calc-table'), warnings = $('calc-warnings');
@@ -4700,6 +4700,7 @@ class LightweightChartLevelSelectorUI:
     if (data.fx_conversion_fee_applicable) chips.push(calculationChip('↔', `FX conversion ${{numText(data.fx_conversion_fee_pct ?? 1, 1)}}% (2 × 0.5%)`, '', 'positive', data.fx_conversion_fee_enabled));
     chips.push(calculationChip('%', `Broker commission ${{numText(data.broker_commission_pct ?? 0.2, 2)}}%`, '', 'fee', data.broker_commission_enabled));
     const wedgeCalculation = drawnObjects.some(isWedgeLineObject);
+    if (wedgeCalculation && data.take_profit != null) chips.push(calculationChip('◇', 'Take profit', fmt(Number(data.take_profit)), 'positive'));
     if (wedgeCalculation && data.risk_reward != null) chips.push(calculationChip('⚖', 'Risk / reward', `${{numText(data.risk_reward, 2)}}:1`));
     if (wedgeCalculation && data.profit != null) chips.push(calculationChip('+', 'Projected profit', `${{money(data.profit, currency)}} (${{numText(data.profit_percent, 2)}}%)`, 'positive'));
     const userMarkedZr = !!levelPoints.check_zr_value_fibo_or_elevation && !levelPoints.check_zr_value_fibo_or_elevation.auto_wedge;
