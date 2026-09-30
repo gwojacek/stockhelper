@@ -477,6 +477,10 @@ def test_position_calculation_summary_uses_colored_semantic_cards():
     assert "userMarkedZr && data.zr_ratio != null" in source
     assert "position:absolute; right:0; top:0" in source
     assert "${{value || '&nbsp;'}}" in source
+    assert "grid-template-rows:28px 18px" in source
+    assert "min-height:64px" in source
+    assert "white-space:nowrap; text-overflow:ellipsis" in source
+    assert ".calc-chip-projected-profit .calc-chip-value {{ font-size:12px; }}" in source
 
 
 def test_fx_toggle_recalculation_keeps_selected_chart_levels_and_latest_request():
